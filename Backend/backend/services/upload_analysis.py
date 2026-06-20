@@ -1,0 +1,321 @@
+from __future__ import annotations
+
+from collections import Counter, deque
+from datetime import datetime, timezone
+import io
+import json
+from pathlib import Path
+from threading import Lock
+
+import pandas as pd
+
+from backend.schemas import (
+    AlertRecord,
+    RecentDetectionPoint,
+    UploadAnalysisResponse,
+    UploadModelBreakdown,
+    UploadRecordResult,
+    UploadSummary,
+)
+from backend.services.predict import predict_processed_frame
+from backend.services.preprocess import apply_known_headerless_schema, prepare_batch_input
+
+ALLOWED_EXTENSIONS = {".csv", ".json"}
+NORMAL_LABELS = {"normal", "benign", "0", "none", "unknown"}
+
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _read_csv(contents: bytes, *, header: int | None = 0) -> pd.DataFrame:
+    for encoding in (None, "latin1"):
+        try:
+            buffer = io.BytesIO(contents)
+            if encoding is None:
+                return pd.read_csv(buffer, header=header)
+            return pd.read_csv(buffer, encoding=encoding, header=header)
+        except UnicodeDecodeError:
+            continue
+        except Exception as exc:
+            raise ValueError("Unable to parse the uploaded CSV file.") from exc
+
+    raise ValueError("Unable to parse the uploaded CSV file.")
+
+
+def _read_json(contents: bytes) -> pd.DataFrame:
+    try:
+        payload = json.loads(contents.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("Unable to parse the uploaded JSON file.") from exc
+
+    records: list[dict] | list | None
+    if isinstance(payload, list):
+        records = payload
+    elif isinstance(payload, dict):
+        if isinstance(payload.get("records"), list):
+            records = payload["records"]
+        elif isinstance(payload.get("data"), list):
+            records = payload["data"]
+        else:
+            records = [payload]
+    else:
+        raise ValueError("JSON uploads must be an object or an array of objects.")
+
+    frame = pd.DataFrame(records)
+    if frame.empty:
+        raise ValueError("Uploaded JSON is empty.")
+
+    return frame
+
+
+def _read_upload(filename: str, contents: bytes, *, header: int | None = 0) -> pd.DataFrame:
+    suffix = Path(filename).suffix.lower()
+    if suffix == ".json":
+        return _read_json(contents)
+    return _read_csv(contents, header=header)
+
+
+def _clean_optional_text(value) -> str | None:
+    if pd.isna(value):
+        return None
+
+    text = str(value).strip()
+    return text or None
+
+
+def _build_alert_level(result: str, attack_probability: float) -> str:
+    if result != "attack":
+        return "low"
+    if attack_probability >= 0.9:
+        return "high"
+    if attack_probability >= 0.7:
+        return "medium"
+    return "low"
+
+
+def _summarize_model_predictions(results) -> UploadModelBreakdown:
+    suspicious_records = sum(1 for item in results if item.result == "attack")
+    total_records = len(results)
+    normal_records = total_records - suspicious_records
+    attack_percentage = (
+        round((suspicious_records / total_records) * 100, 2) if total_records else 0.0
+    )
+
+    return UploadModelBreakdown(
+        suspicious_records=suspicious_records,
+        normal_records=normal_records,
+        attack_percentage=attack_percentage,
+    )
+
+
+def _validate_filename(filename: str) -> None:
+    lowered = filename.lower()
+    if not any(lowered.endswith(extension) for extension in ALLOWED_EXTENSIONS):
+        raise ValueError("Only CSV and JSON uploads are supported right now.")
+
+
+def _infer_top_attack_type(context_df: pd.DataFrame) -> str | None:
+    if "attack_name" not in context_df.columns:
+        return None
+
+    candidates: list[str] = []
+    for value in context_df["attack_name"].tolist():
+        text = _clean_optional_text(value)
+        if text is None:
+            continue
+        normalized = text.lower()
+        if normalized in NORMAL_LABELS:
+            continue
+        candidates.append(text)
+
+    if not candidates:
+        return None
+
+    return Counter(candidates).most_common(1)[0][0]
+
+
+def analyze_upload_file(filename: str, contents: bytes) -> UploadAnalysisResponse:
+    _validate_filename(filename)
+    raw_df = _read_upload(filename, contents)
+
+    if raw_df.empty:
+        raise ValueError("Uploaded file is empty.")
+
+    try:
+        processed_df, context_df = prepare_batch_input(raw_df)
+    except ValueError as exc:
+        suffix = Path(filename).suffix.lower()
+        if suffix == ".json":
+            raise
+
+        headerless_df = _read_upload(filename, contents, header=None)
+        if headerless_df.empty:
+            raise ValueError("Uploaded file is empty.") from exc
+
+        try:
+            structured_df = apply_known_headerless_schema(headerless_df)
+            processed_df, context_df = prepare_batch_input(structured_df)
+        except ValueError:
+            raise exc
+
+    batch_prediction = predict_processed_frame(processed_df)
+    best_model = batch_prediction["best_model"]
+    selection_metric = batch_prediction["selection_metric"]
+    best_model_metrics = batch_prediction["best_model_metrics"]
+    model_results = batch_prediction["model_results"]
+    best_model_results = model_results[best_model]
+    generated_at = utcnow()
+
+    records: list[UploadRecordResult] = []
+    suspicious_rows: list[UploadRecordResult] = []
+    alerts: list[AlertRecord] = []
+    suspicious_count = 0
+
+    for position, best_result in enumerate(best_model_results, start=1):
+        row_label = context_df.index[position - 1]
+        alert_level = _build_alert_level(
+            best_result.result,
+            best_result.attack_probability,
+        )
+        row_model_results = {
+            model_name: results[position - 1]
+            for model_name, results in model_results.items()
+        }
+
+        source_ip = _clean_optional_text(context_df.at[row_label, "source_ip"])
+        destination_ip = _clean_optional_text(context_df.at[row_label, "destination_ip"])
+        route = _clean_optional_text(context_df.at[row_label, "route"])
+        protocol = _clean_optional_text(context_df.at[row_label, "protocol"])
+        service = _clean_optional_text(context_df.at[row_label, "service"])
+        duration = float(context_df.at[row_label, "duration"])
+
+        record = UploadRecordResult(
+            row_id=position,
+            source_ip=source_ip,
+            destination_ip=destination_ip,
+            protocol=protocol,
+            service=service,
+            duration=duration,
+            prediction=best_result.prediction,
+            result=best_result.result,
+            detection_result=best_result.result,
+            attack_probability=best_result.attack_probability,
+            confidence=best_result.confidence,
+            alert_level=alert_level,
+            model_results=row_model_results,
+        )
+        records.append(record)
+
+        if best_result.result == "attack":
+            suspicious_count += 1
+            suspicious_rows.append(record)
+            alerts.append(
+                AlertRecord(
+                    alert_type="upload",
+                    created_at=generated_at,
+                    message=f"Upload row {position} flagged as suspicious by {best_model}.",
+                    alert_level=alert_level,
+                    source_ip=source_ip,
+                    destination_ip=destination_ip,
+                    route=route,
+                    row_id=position,
+                    prediction=best_result.prediction,
+                    result=best_result.result,
+                    confidence=best_result.confidence,
+                    attack_probability=best_result.attack_probability,
+                )
+            )
+
+    total_records = len(records)
+    normal_count = total_records - suspicious_count
+    attack_percentage = (
+        round((suspicious_count / total_records) * 100, 2) if total_records else 0.0
+    )
+
+    response = UploadAnalysisResponse(
+        generated_at=generated_at,
+        filename=filename,
+        summary=UploadSummary(
+            total_records=total_records,
+            suspicious_records=suspicious_count,
+            suspicious_rows=suspicious_count,
+            normal_records=normal_count,
+            normal_count=normal_count,
+            attack_count=suspicious_count,
+            attack_percentage=attack_percentage,
+            top_attack_type=_infer_top_attack_type(context_df),
+            model_used=best_model,
+            best_model=best_model,
+            selection_metric=selection_metric,
+            best_model_metrics=best_model_metrics,
+            model_summaries={
+                model_name: _summarize_model_predictions(results)
+                for model_name, results in model_results.items()
+            },
+        ),
+        alerts=alerts[:50],
+        suspicious_rows=suspicious_rows[:100],
+        records=records,
+    )
+    upload_history.record(response)
+    return response
+
+
+def analyze_csv_upload(filename: str, contents: bytes) -> UploadAnalysisResponse:
+    return analyze_upload_file(filename=filename, contents=contents)
+
+
+class UploadHistoryStore:
+    def __init__(self):
+        self._total_records = 0
+        self._total_suspicious = 0
+        self._total_normal = 0
+        self._recent_alerts: deque[AlertRecord] = deque(maxlen=100)
+        self._recent_detections: deque[RecentDetectionPoint] = deque(maxlen=50)
+        self._lock = Lock()
+
+    def record(self, response: UploadAnalysisResponse) -> None:
+        with self._lock:
+            self._total_records += response.summary.total_records
+            self._total_suspicious += response.summary.suspicious_records
+            self._total_normal += response.summary.normal_records
+            self._recent_detections.append(
+                RecentDetectionPoint(
+                    timestamp=response.generated_at,
+                    total_records=response.summary.total_records,
+                    suspicious_records=response.summary.suspicious_records,
+                )
+            )
+            for alert in reversed(response.alerts):
+                self._recent_alerts.appendleft(alert)
+
+    def get_summary(self) -> dict[str, int | float]:
+        with self._lock:
+            attack_percentage = (
+                round((self._total_suspicious / self._total_records) * 100, 2)
+                if self._total_records
+                else 0.0
+            )
+            return {
+                "total_records": self._total_records,
+                "total_suspicious": self._total_suspicious,
+                "total_normal": self._total_normal,
+                "attack_percentage": attack_percentage,
+            }
+
+    def get_recent_alerts(self, limit: int = 25) -> list[AlertRecord]:
+        with self._lock:
+            return list(self._recent_alerts)[:limit]
+
+    def get_recent_alert_count(self) -> int:
+        with self._lock:
+            return len(self._recent_alerts)
+
+    def get_recent_detections(self, limit: int = 20) -> list[RecentDetectionPoint]:
+        with self._lock:
+            detections = list(self._recent_detections)[-limit:]
+        return detections
+
+
+upload_history = UploadHistoryStore()
