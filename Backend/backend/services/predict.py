@@ -31,6 +31,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 ARTIFACT_DIRS = (
     BASE_DIR,
     BASE_DIR / "anomaly-model-artifacts",
+    PROJECT_ROOT / "models",
     PROJECT_ROOT / "outputs" / "final_unified_pipeline" / "models",
 )
 S3_DOWNLOAD_DIR = Path(tempfile.gettempdir()) / "anomaly-network-model-artifacts"
@@ -54,9 +55,16 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ModelLoadingError(RuntimeError):
-    def __init__(self, message: str, *, details: str | None = None):
+    def __init__(
+        self,
+        message: str,
+        *,
+        details: str | None = None,
+        stage: str = "load_models",
+    ):
         super().__init__(message)
         self.details = details or message
+        self.stage = stage
 
 
 def utcnow() -> datetime:
@@ -178,11 +186,11 @@ def download_s3_artifact(filename: str, *, env_var: str | None = None) -> Path |
         ) from exc
 
     key = build_s3_key(filename, env_var=env_var)
-    local_path = S3_DOWNLOAD_DIR / Path(key).name
+    local_path = S3_DOWNLOAD_DIR / key
     if local_path.exists() and local_path.stat().st_size > 0:
         return local_path
 
-    S3_DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    local_path.parent.mkdir(parents=True, exist_ok=True)
     LOGGER.info("Downloading model artifact from s3://%s/%s to %s", bucket, key, local_path)
 
     try:
@@ -268,44 +276,69 @@ def inspect_s3_artifact(filename: str, *, env_var: str | None = None) -> dict[st
     return result
 
 
-def get_model_artifact_debug_info() -> dict[str, Any]:
-    configured_bucket = get_s3_bucket()
-    artifacts: dict[str, Any] = {}
+def inspect_model_artifact(model_name: str, filename: str) -> dict[str, Any]:
+    env_var = MODEL_S3_KEY_ENV_VARS[model_name]
+    expected_key = build_s3_key(filename, env_var=env_var)
+    local_path = resolve_artifact_path(filename)
+    s3_info = inspect_s3_artifact(filename, env_var=env_var)
+    downloaded_path: Path | None = None
+    download_error: str | None = None
 
-    for model_name in MODEL_ORDER:
-        env_var = MODEL_S3_KEY_ENV_VARS[model_name]
-        candidates = []
-        configured_key = os.getenv(env_var)
-        filenames = (
-            (Path(configured_key).name,) if configured_key else MODEL_FILENAME_CANDIDATES[model_name]
-        )
+    try:
+        downloaded_path = download_s3_artifact(filename, env_var=env_var)
+    except ModelLoadingError as exc:
+        download_error = exc.details
 
-        for filename in filenames:
-            local_path = resolve_artifact_path(filename)
-            candidates.append(
-                {
-                    "filename": filename,
-                    "local_path": str(local_path) if local_path else None,
-                    "local_exists": local_path is not None,
-                    "local_size": local_path.stat().st_size if local_path else None,
-                    "s3": inspect_s3_artifact(filename, env_var=env_var),
-                }
-            )
-
-        artifacts[model_name] = {
-            "env_var": env_var,
-            "configured_key": configured_key,
-            "candidates": candidates,
+    artifact_path = downloaded_path or local_path
+    serializer_checks: dict[str, Any] = {}
+    if artifact_path is not None and artifact_path.exists():
+        serializer_checks = {
+            serializer: summarize_deserialization(artifact_path, serializer)
+            for serializer in ("auto", "pickle", "joblib")
         }
+
+    return {
+        "model": model_name,
+        "filename": filename,
+        "expected_s3_key": expected_key,
+        "s3": s3_info,
+        "download": {
+            "success": downloaded_path is not None,
+            "path": str(downloaded_path) if downloaded_path else None,
+            "error": download_error,
+        },
+        "local_fallback": {
+            "path": str(local_path) if local_path else None,
+            "exists": local_path is not None,
+            "size": local_path.stat().st_size if local_path else None,
+        },
+        "serializer_checks": serializer_checks,
+    }
+
+
+def get_model_artifact_debug_info() -> dict[str, Any]:
+    expected_artifacts = {
+        "xgboost": "xgboost.pkl",
+        "random_forest": "random_forest.pkl",
+    }
 
     metadata_path = resolve_artifact_path(MODEL_METRICS_FILENAME)
     return {
-        "model_s3_bucket": configured_bucket,
-        "model_s3_prefix": get_s3_prefix(),
-        "model_serializer": os.getenv("MODEL_SERIALIZER", "auto"),
+        "environment": {
+            "MODEL_S3_BUCKET": os.getenv("MODEL_S3_BUCKET"),
+            "MODEL_S3_PREFIX": os.getenv("MODEL_S3_PREFIX"),
+            "MODEL_SERIALIZER": os.getenv("MODEL_SERIALIZER", "auto"),
+        },
         "serializer_order": list(get_serializer_order()),
         "s3_download_dir": str(S3_DOWNLOAD_DIR),
-        "models": artifacts,
+        "expected_s3_keys": {
+            model_name: build_s3_key(filename, env_var=MODEL_S3_KEY_ENV_VARS[model_name])
+            for model_name, filename in expected_artifacts.items()
+        },
+        "models": {
+            model_name: inspect_model_artifact(model_name, filename)
+            for model_name, filename in expected_artifacts.items()
+        },
         "metadata": {
             "filename": MODEL_METRICS_FILENAME,
             "local_path": str(metadata_path) if metadata_path else None,
@@ -339,6 +372,67 @@ def get_serializer_order() -> tuple[str, ...]:
     return ("pickle", "joblib")
 
 
+def attempt_model_deserialization(model_path: Path, serializer: str) -> dict[str, Any]:
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            if serializer == "pickle":
+                with model_path.open("rb") as file:
+                    model = pickle.load(file)
+            elif serializer == "joblib":
+                model = joblib.load(model_path)
+            else:
+                return {
+                    "success": False,
+                    "serializer": serializer,
+                    "model": None,
+                    "model_type": None,
+                    "error": f"Unsupported serializer: {serializer}",
+                }
+    except Exception as exc:
+        return {
+            "success": False,
+            "serializer": serializer,
+            "model": None,
+            "model_type": None,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+
+    return {
+        "success": True,
+        "serializer": serializer,
+        "model": model,
+        "model_type": f"{type(model).__module__}.{type(model).__name__}",
+        "error": None,
+    }
+
+
+def summarize_deserialization(model_path: Path, serializer: str) -> dict[str, Any]:
+    if serializer == "auto":
+        attempts = [
+            summarize_deserialization(model_path, candidate)
+            for candidate in get_serializer_order()
+        ]
+        successful = next((attempt for attempt in attempts if attempt["success"]), None)
+        return {
+            "success": successful is not None,
+            "serializer": "auto",
+            "selected_serializer": successful["serializer"] if successful else None,
+            "model_type": successful["model_type"] if successful else None,
+            "attempts": attempts,
+            "error": None if successful else "No serializer could load this artifact.",
+        }
+
+    result = attempt_model_deserialization(model_path, serializer)
+    return {
+        "success": result["success"],
+        "serializer": serializer,
+        "selected_serializer": serializer if result["success"] else None,
+        "model_type": result["model_type"],
+        "error": result["error"],
+    }
+
+
 def deserialize_model(model_name: str, model_path: Path) -> Any:
     file_size = model_path.stat().st_size
     errors: list[str] = []
@@ -349,25 +443,27 @@ def deserialize_model(model_name: str, model_path: Path) -> Any:
         model_path,
         file_size,
     )
+    print(
+        f"MODEL_LOAD_START model={model_name} path={model_path} size={file_size}",
+        flush=True,
+    )
 
     for serializer in get_serializer_order():
         LOGGER.info("Attempting %s deserialization for %s", serializer, model_path)
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                if serializer == "pickle":
-                    with model_path.open("rb") as file:
-                        model = pickle.load(file)
-                else:
-                    model = joblib.load(model_path)
-        except Exception as exc:
-            errors.append(f"{serializer}: {type(exc).__name__}: {exc}")
+        print(
+            f"MODEL_LOAD_SERIALIZER_ATTEMPT model={model_name} serializer={serializer}",
+            flush=True,
+        )
+        result = attempt_model_deserialization(model_path, serializer)
+        if not result["success"]:
+            error_message = str(result["error"])
+            errors.append(f"{serializer}: {error_message}")
             LOGGER.warning(
                 "Unable to deserialize %s model from %s with %s: %s",
                 model_name,
                 model_path,
                 serializer,
-                exc,
+                error_message,
             )
             continue
 
@@ -377,7 +473,11 @@ def deserialize_model(model_name: str, model_path: Path) -> Any:
             model_path,
             serializer,
         )
-        return model
+        print(
+            f"MODEL_LOAD_SUCCESS model={model_name} serializer={serializer}",
+            flush=True,
+        )
+        return result["model"]
 
     raise ModelLoadingError(
         "Model loading failed",
@@ -391,7 +491,11 @@ def load_models() -> dict[str, Any]:
     load_errors: list[str] = []
 
     for model_name in MODEL_ORDER:
-        model_path = resolve_model_path(model_name)
+        try:
+            model_path = resolve_model_path(model_name)
+        except ModelLoadingError as exc:
+            load_errors.append(f"{model_name}: {exc.details}")
+            continue
 
         if model_path is not None:
             if is_git_lfs_pointer(model_path):
@@ -418,6 +522,10 @@ def load_models() -> dict[str, Any]:
             detail = f"{detail} Errors: {' | '.join(load_errors)}"
         raise ModelLoadingError("Model loading failed", details=detail)
 
+    print(
+        f"MODEL_LOADING_RESULT loaded_models={','.join(models.keys())}",
+        flush=True,
+    )
     return models
 
 
@@ -541,6 +649,10 @@ def predict_with_model(
 def predict_processed_frame(processed_df: pd.DataFrame) -> dict[str, Any]:
     loaded_models = load_models()
     available_models = [model_name for model_name in MODEL_ORDER if model_name in loaded_models]
+    print(
+        f"PREDICTION_MODEL_INPUT rows={processed_df.shape[0]} features={processed_df.shape[1]} available_models={','.join(available_models)}",
+        flush=True,
+    )
     best_model, selection_metric, best_model_metrics = resolve_best_model_name(
         available_models
     )

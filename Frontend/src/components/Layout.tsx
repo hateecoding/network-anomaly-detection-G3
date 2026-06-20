@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Tone } from "../data/mockData";
+import { Tone } from "../data/presentationData";
 import { StatusBadge } from "./StatusBadge";
 
 export type PageId =
@@ -36,7 +36,7 @@ const pageHeadings: Record<PageId, { title: string; subtitle: string }> = {
   },
   "self-test": {
     title: "Self-Test",
-    subtitle: "Manually enter traffic features and inspect the frontend prediction experience.",
+    subtitle: "Manually enter traffic features and inspect the AI prediction response.",
   },
 };
 
@@ -94,9 +94,9 @@ export function Layout({
         </nav>
 
         <div className="sidebar-footer">
-          <p className="eyebrow">Frontend Scope</p>
-          <StatusBadge label="UI Prototype" tone={"info" satisfies Tone} />
-          <p>Ready for later FastAPI integration with upload, summary, visitor, and predict endpoints.</p>
+          <p className="eyebrow">Deployment Status</p>
+          <StatusBadge label="Live AI Service" tone={"info" satisfies Tone} />
+          <p>Connected to FastAPI endpoints for upload analysis, dashboard summary, visitors, and prediction.</p>
         </div>
       </aside>
 
@@ -128,7 +128,7 @@ export function Layout({
             <button type="button" className="refresh-button" onClick={onRefresh}>
               Refresh
             </button>
-            <StatusBadge label="Frontend only" tone="info" />
+            <StatusBadge label="Production" tone="info" />
             <div className="signal-card">
               <span className="signal-dot" />
               Last sync {formatTimestamp(lastRefreshAt)}

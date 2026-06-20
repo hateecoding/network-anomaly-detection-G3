@@ -13,6 +13,8 @@ node_modules/
 dist/
 build/
 *.tsbuildinfo
+Frontend/vite.config.js
+Frontend/vite.config.d.ts
 
 # Local environment files
 .env

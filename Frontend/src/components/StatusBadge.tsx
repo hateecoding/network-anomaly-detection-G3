@@ -1,4 +1,4 @@
-import { Tone } from "../data/mockData";
+import { Tone } from "../data/presentationData";
 
 type StatusBadgeProps = {
   label: string;

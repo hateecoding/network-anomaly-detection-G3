@@ -1,5 +1,5 @@
 import { useState, useTransition } from "react";
-import { latestSelfTest } from "../data/mockData";
+import { latestSelfTest } from "../data/presentationData";
 import { predictNetworkSample, type PredictionInput } from "../utils/predict";
 import { Panel } from "./Panel";
 import { PredictionResultCard } from "./PredictionResultCard";
@@ -99,7 +99,7 @@ export function SelfTestPage() {
     });
     setStatus({
       type: "idle",
-      message: "Form reset to the default sample.",
+      message: "Form reset to the default analysis input.",
     });
   };
 
@@ -108,7 +108,7 @@ export function SelfTestPage() {
       <div className="analytics-grid">
         <Panel
           title="Manual prediction form"
-          subtitle="Use this page to send one record to the live FastAPI /predict endpoint."
+          subtitle="Send one traffic record to the FastAPI prediction endpoint."
         >
           <div className="prediction-form-grid">
             <label className="input-group">
@@ -186,7 +186,7 @@ export function SelfTestPage() {
 
         <Panel
           title="Prediction output"
-          subtitle="This card renders the live backend response and derived attack probability."
+          subtitle="AI classification result and derived attack probability."
         >
           <PredictionResultCard
             confidence={result.confidence}

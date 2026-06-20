@@ -18,7 +18,11 @@ from backend.schemas import (
     UploadSummary,
 )
 from backend.services.predict import predict_processed_frame
-from backend.services.preprocess import apply_known_headerless_schema, prepare_batch_input
+from backend.services.preprocess import (
+    apply_known_headerless_schema,
+    get_feature_columns,
+    prepare_batch_input,
+)
 
 ALLOWED_EXTENSIONS = {".csv", ".json"}
 NORMAL_LABELS = {"normal", "benign", "0", "none", "unknown"}
@@ -136,8 +140,13 @@ def _infer_top_attack_type(context_df: pd.DataFrame) -> str | None:
 
 
 def analyze_upload_file(filename: str, contents: bytes) -> UploadAnalysisResponse:
+    print(f"UPLOAD_LOG_ANALYSIS_START filename={filename}", flush=True)
     _validate_filename(filename)
     raw_df = _read_upload(filename, contents)
+    print(
+        f"UPLOAD_LOG_CSV_SHAPE rows={raw_df.shape[0]} columns={raw_df.shape[1]}",
+        flush=True,
+    )
 
     if raw_df.empty:
         raise ValueError("Uploaded file is empty.")
@@ -159,7 +168,17 @@ def analyze_upload_file(filename: str, contents: bytes) -> UploadAnalysisRespons
         except ValueError:
             raise exc
 
+    expected_feature_count = len(get_feature_columns())
+    print(
+        f"UPLOAD_LOG_FEATURES expected={expected_feature_count} selected={processed_df.shape[1]} rows={processed_df.shape[0]}",
+        flush=True,
+    )
+    print("UPLOAD_LOG_MODEL_LOADING_START", flush=True)
     batch_prediction = predict_processed_frame(processed_df)
+    print(
+        f"UPLOAD_LOG_MODEL_LOADING_DONE best_model={batch_prediction['best_model']} models={','.join(batch_prediction['model_results'].keys())}",
+        flush=True,
+    )
     best_model = batch_prediction["best_model"]
     selection_metric = batch_prediction["selection_metric"]
     best_model_metrics = batch_prediction["best_model_metrics"]
@@ -231,6 +250,10 @@ def analyze_upload_file(filename: str, contents: bytes) -> UploadAnalysisRespons
     normal_count = total_records - suspicious_count
     attack_percentage = (
         round((suspicious_count / total_records) * 100, 2) if total_records else 0.0
+    )
+    print(
+        f"UPLOAD_LOG_PREDICTION_SUMMARY total={total_records} normal={normal_count} suspicious={suspicious_count} attack_percentage={attack_percentage}",
+        flush=True,
     )
 
     response = UploadAnalysisResponse(

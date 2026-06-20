@@ -224,53 +224,6 @@ export const latestSelfTest: SelfTestPreview = {
   testedAt: "Apr 02, 10:24",
 };
 
-export const sampleUploadRows: UploadAnalysisRow[] = [
-  {
-    rowId: "ROW-001",
-    sourceIp: "203.0.113.41",
-    destinationIp: "10.0.0.12",
-    protocol: "TCP",
-    service: "http",
-    duration: 42,
-    prediction: "Normal",
-    confidence: 88,
-    alertLevel: "Low",
-  },
-  {
-    rowId: "ROW-002",
-    sourceIp: "198.51.100.8",
-    destinationIp: "10.0.0.19",
-    protocol: "TCP",
-    service: "ssh",
-    duration: 133,
-    prediction: "Attack",
-    confidence: 96,
-    alertLevel: "High",
-  },
-  {
-    rowId: "ROW-003",
-    sourceIp: "203.0.113.14",
-    destinationIp: "10.0.0.17",
-    protocol: "UDP",
-    service: "dns",
-    duration: 27,
-    prediction: "Suspicious",
-    confidence: 74,
-    alertLevel: "Medium",
-  },
-  {
-    rowId: "ROW-004",
-    sourceIp: "192.0.2.19",
-    destinationIp: "10.0.0.33",
-    protocol: "ICMP",
-    service: "icmp",
-    duration: 88,
-    prediction: "Attack",
-    confidence: 91,
-    alertLevel: "High",
-  },
-];
-
 export const liveVisitorSnapshots: LiveVisitorSnapshot[] = [
   {
     activeVisitors: 64,
@@ -405,4 +358,4 @@ export const liveVisitorSnapshots: LiveVisitorSnapshot[] = [
 ];
 
 export const emptyUploadStateMessage =
-  "Upload a CSV file to preview how the frontend will render analyzed results from the backend.";
+  "Upload a CSV file to run AI analysis and populate the results table.";

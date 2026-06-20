@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   dashboardDistribution,
   dashboardMetrics,
@@ -6,7 +7,8 @@ import {
   recentAlerts,
   suspiciousRoutes,
   visitorSummaryMetrics,
-} from "../data/mockData";
+} from "../data/presentationData";
+import { fetchDashboardBackendData, type DashboardBackendData } from "../utils/dashboard";
 import { AlertList } from "./AlertList";
 import { LineChart } from "./LineChart";
 import { Panel } from "./Panel";
@@ -16,20 +18,56 @@ import { RouteList } from "./RouteList";
 import { SummaryCard } from "./SummaryCard";
 
 export function DashboardPage() {
+  const [backendData, setBackendData] = useState<DashboardBackendData | null>(null);
+  const [statusMessage, setStatusMessage] = useState("Loading backend summary...");
+
+  useEffect(() => {
+    let active = true;
+
+    fetchDashboardBackendData()
+      .then((data) => {
+        if (!active) {
+          return;
+        }
+        setBackendData(data);
+        setStatusMessage("Backend summary refreshed successfully.");
+      })
+      .catch(() => {
+        if (!active) {
+          return;
+        }
+        setStatusMessage("Dashboard summary is temporarily unavailable. Existing results remain visible.");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const metrics = backendData?.metrics ?? dashboardMetrics;
+  const visitorMetrics = backendData?.visitorMetrics ?? visitorSummaryMetrics;
+  const distribution = backendData?.distribution ?? dashboardDistribution;
+  const trend = backendData?.detectionTrend.length ? backendData.detectionTrend : detectionTrend;
+  const alerts = backendData?.alerts.length ? backendData.alerts : recentAlerts.slice(0, 4);
+  const selfTest = backendData?.latestSelfTest ?? latestSelfTest;
+  const flaggedCount = distribution
+    .filter((segment) => segment.label !== "Normal")
+    .reduce((total, segment) => total + segment.value, 0);
+
   return (
     <div className="page-grid">
       <div className="hero-note panel">
         <div>
-          <p className="eyebrow">Frontend Scope</p>
+          <p className="eyebrow">AI Security Operations</p>
           <h3>
-            This dashboard is the visual layer. It should render backend results, uploaded analysis,
-            visitor activity, and manual self-tests without overwhelming the user.
+            Unified view of uploaded analysis, visitor activity, alerts, and AI prediction results.
           </h3>
+          <p className="hero-note-copy">{statusMessage}</p>
         </div>
       </div>
 
       <div className="summary-grid">
-        {dashboardMetrics.map((metric) => (
+        {metrics.map((metric) => (
           <SummaryCard key={metric.label} {...metric} />
         ))}
       </div>
@@ -38,8 +76,8 @@ export function DashboardPage() {
         <Panel title="Normal vs flagged" subtitle="Uploaded result distribution for the latest analysis batch.">
           <PieChart
             centerLabel="Flagged"
-            centerValue="633"
-            segments={dashboardDistribution}
+            centerValue={flaggedCount.toLocaleString()}
+            segments={distribution}
           />
         </Panel>
 
@@ -50,7 +88,7 @@ export function DashboardPage() {
                 key: "normal",
                 label: "Normal",
                 color: "#34d399",
-                values: detectionTrend.map((item) => ({
+                values: trend.map((item) => ({
                   label: item.label,
                   value: item.normal,
                 })),
@@ -59,7 +97,7 @@ export function DashboardPage() {
                 key: "suspicious",
                 label: "Suspicious",
                 color: "#fbbf24",
-                values: detectionTrend.map((item) => ({
+                values: trend.map((item) => ({
                   label: item.label,
                   value: item.suspicious,
                 })),
@@ -68,7 +106,7 @@ export function DashboardPage() {
                 key: "attack",
                 label: "Attack",
                 color: "#f97316",
-                values: detectionTrend.map((item) => ({
+                values: trend.map((item) => ({
                   label: item.label,
                   value: item.attack,
                 })),
@@ -80,13 +118,13 @@ export function DashboardPage() {
 
       <div className="dashboard-lower-grid">
         <Panel title="Recent alerts" subtitle="Latest alerts worth showing on the landing view.">
-          <AlertList alerts={recentAlerts.slice(0, 4)} />
+          <AlertList alerts={alerts} />
         </Panel>
 
         <div className="dashboard-side-stack">
           <Panel title="Visitor summary" subtitle="Current website activity snapshot, not full packet capture.">
             <div className="summary-grid compact-grid">
-              {visitorSummaryMetrics.map((metric) => (
+              {visitorMetrics.map((metric) => (
                 <SummaryCard key={metric.label} {...metric} />
               ))}
             </div>
@@ -98,11 +136,11 @@ export function DashboardPage() {
 
           <Panel title="Latest self-test" subtitle="Most recent manual prediction run from the self-test page.">
             <PredictionResultCard
-              confidence={latestSelfTest.confidence}
-              interpretation={latestSelfTest.interpretation}
-              label={latestSelfTest.label}
-              score={latestSelfTest.score}
-              testedAt={latestSelfTest.testedAt}
+              confidence={selfTest.confidence}
+              interpretation={selfTest.interpretation}
+              label={selfTest.label}
+              score={selfTest.score}
+              testedAt={selfTest.testedAt}
             />
           </Panel>
         </div>

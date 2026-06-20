@@ -179,17 +179,17 @@ function buildExplanation(
 ) {
   if (result === "attack") {
     if (attackProbability >= 0.85) {
-      return "The deployed model sees a strong attack pattern in this sample and assigns a high attack probability.";
+      return "The deployed model sees a strong attack pattern in this traffic record and assigns a high attack probability.";
     }
 
-    return "The deployed model still flags this sample as an attack, but with a more moderate margin.";
+    return "The deployed model still flags this traffic record as an attack, but with a more moderate margin.";
   }
 
   if (attackProbability >= 0.35) {
     return "The deployed model returns normal overall, but the attack probability is elevated enough to justify a closer review.";
   }
 
-  return "The deployed model keeps this sample in the normal range with a low attack probability.";
+  return "The deployed model keeps this traffic record in the normal range with a low attack probability.";
 }
 
 function clamp(value: number, min: number, max: number) {

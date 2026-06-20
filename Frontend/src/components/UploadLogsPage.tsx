@@ -1,6 +1,6 @@
 import { useDeferredValue, useState } from "react";
-import { AlertRecord, emptyUploadStateMessage, sampleUploadRows, UploadAnalysisRow } from "../data/mockData";
-import { analyzeUploadedFile, exportUploadRows, loadDemoUploadAnalysis } from "../utils/uploadAnalysis";
+import { AlertRecord, emptyUploadStateMessage, UploadAnalysisRow } from "../data/presentationData";
+import { analyzeUploadedFile, exportUploadRows } from "../utils/uploadAnalysis";
 import { AlertList } from "./AlertList";
 import { DataColumn, DataTable } from "./DataTable";
 import { EmptyState } from "./EmptyState";
@@ -150,29 +150,13 @@ export function UploadLogsPage() {
     <div className="page-grid">
       <Panel
         title="Upload and analyze"
-        subtitle="Upload a CSV log file and render the real backend /upload-log response."
+        subtitle="Upload a CSV log file and review the AI analysis returned by the backend."
       >
         <UploadBox file={selectedFile} onSelectFile={setSelectedFile} disabled={state.type === "loading"} />
 
         <div className="upload-toolbar">
           <button type="button" className="primary-button" onClick={handleAnalyze} disabled={state.type === "loading"}>
             Analyze file
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={state.type === "loading"}
-            onClick={() => {
-              const demoResult = loadDemoUploadAnalysis(sampleUploadRows);
-              setRows(demoResult.rows);
-              setAlerts([]);
-              setState({
-                type: "success",
-                message: "Loaded demo upload results without calling the backend.",
-              });
-            }}
-          >
-            Load demo data
           </button>
           <span className={`inline-message inline-message-${statusTone}`}>{state.message}</span>
         </div>
@@ -258,13 +242,13 @@ export function UploadLogsPage() {
         </div>
       </Panel>
 
-      <Panel title="Upload alerts" subtitle="Rows flagged above normal are summarized as lightweight frontend alerts.">
+      <Panel title="Upload alerts" subtitle="Rows flagged above normal are summarized for analyst review.">
         {alerts.length > 0 ? (
           <AlertList alerts={alerts} />
         ) : (
           <EmptyState
             title="No upload alerts yet"
-            description="Run an analysis or load the demo data to preview the alert section."
+            description="Run an analysis to populate this alert section."
           />
         )}
       </Panel>

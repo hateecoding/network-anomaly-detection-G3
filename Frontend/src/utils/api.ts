@@ -6,6 +6,9 @@ type RequestJsonOptions = Omit<RequestInit, "body"> & {
 
 type ErrorPayload = {
   detail?: string | { msg?: string }[] | Record<string, unknown>;
+  details?: string | Record<string, unknown>;
+  error?: string | { message?: string; details?: unknown };
+  error_info?: { message?: string; details?: unknown };
   message?: string;
 };
 
@@ -57,6 +60,10 @@ function getErrorMessage(data: unknown, status: number) {
     return payload.detail;
   }
 
+  if (typeof payload.details === "string" && payload.details.trim()) {
+    return payload.details;
+  }
+
   if (Array.isArray(payload.detail)) {
     const joined = payload.detail
       .map((item) => item.msg)
@@ -70,6 +77,23 @@ function getErrorMessage(data: unknown, status: number) {
 
   if (typeof payload.message === "string" && payload.message.trim()) {
     return payload.message;
+  }
+
+  if (
+    payload.error &&
+    typeof payload.error === "object" &&
+    typeof payload.error.message === "string" &&
+    payload.error.message.trim()
+  ) {
+    return payload.error.message;
+  }
+
+  if (
+    payload.error_info &&
+    typeof payload.error_info.message === "string" &&
+    payload.error_info.message.trim()
+  ) {
+    return payload.error_info.message;
   }
 
   return `Request failed with status ${status}.`;

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 import sys
+import traceback
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
@@ -79,15 +80,21 @@ def build_error_response(
     code: str,
     message: str,
     details: object | None = None,
+    stage: str | None = None,
 ) -> JSONResponse:
     payload: dict[str, object] = {
-        "error": {
+        "error": code,
+        "message": message,
+        "detail": details if details is not None else message,
+        "error_info": {
             "code": code,
             "message": message,
         }
     }
+    if stage is not None:
+        payload["stage"] = stage
     if details is not None:
-        payload["error"]["details"] = details
+        payload["details"] = details
 
     return JSONResponse(
         status_code=status_code,
@@ -130,15 +137,23 @@ async def model_loading_error_handler(request: Request, exc: ModelLoadingError):
         code="model_loading_failed",
         message="Model loading failed",
         details=exc.details,
+        stage=exc.stage,
     )
 
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
+    print(
+        f"UNHANDLED_BACKEND_ERROR path={request.url.path} error={type(exc).__name__}: {exc}",
+        flush=True,
+    )
+    traceback.print_exc()
     return build_error_response(
         status_code=500,
         code="internal_error",
         message="The backend could not complete the request.",
+        details=f"{type(exc).__name__}: {exc}",
+        stage="unhandled",
     )
 
 
@@ -186,13 +201,65 @@ def predict(data: TrafficInput):
 @app.post("/upload-log", response_model=UploadAnalysisResponse)
 async def upload_log(file: UploadFile = File(...)):
     filename = file.filename or "upload.csv"
-    contents = await file.read()
-    await file.close()
+    print("UPLOAD_LOG_ENDPOINT_HIT", flush=True)
+    print(f"UPLOAD_LOG_FILENAME filename={filename}", flush=True)
+
+    try:
+        contents = await file.read()
+    except Exception as exc:
+        print(f"UPLOAD_LOG_READ_FAILED error={type(exc).__name__}: {exc}", flush=True)
+        return build_error_response(
+            status_code=400,
+            code="upload_read_failed",
+            message="Uploaded file could not be read.",
+            details=f"{type(exc).__name__}: {exc}",
+            stage="read_upload",
+        )
+    finally:
+        await file.close()
 
     if not contents:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+        return build_error_response(
+            status_code=400,
+            code="empty_upload",
+            message="Uploaded file is empty.",
+            details="The uploaded file did not contain any bytes.",
+            stage="read_upload",
+        )
 
-    return analyze_upload_file(filename=filename, contents=contents)
+    try:
+        return analyze_upload_file(filename=filename, contents=contents)
+    except ModelLoadingError as exc:
+        print(f"UPLOAD_LOG_MODEL_LOADING_FAILED detail={exc.details}", flush=True)
+        return build_error_response(
+            status_code=503,
+            code="model_loading_failed",
+            message="Model loading failed",
+            details=exc.details,
+            stage=exc.stage,
+        )
+    except ValueError as exc:
+        print(f"UPLOAD_LOG_VALIDATION_FAILED detail={exc}", flush=True)
+        return build_error_response(
+            status_code=400,
+            code="upload_analysis_failed",
+            message="Upload analysis failed.",
+            details=str(exc),
+            stage="preprocess_upload",
+        )
+    except Exception as exc:
+        print(
+            f"UPLOAD_LOG_UNEXPECTED_FAILED error={type(exc).__name__}: {exc}",
+            flush=True,
+        )
+        traceback.print_exc()
+        return build_error_response(
+            status_code=500,
+            code="upload_analysis_failed",
+            message="Upload analysis failed.",
+            details=f"{type(exc).__name__}: {exc}",
+            stage="upload_log",
+        )
 
 
 @app.get("/model-metrics", response_model=ModelMetricsResponse)

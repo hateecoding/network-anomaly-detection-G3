@@ -1,4 +1,4 @@
-import { RouteStat } from "../data/mockData";
+import { RouteStat } from "../data/presentationData";
 import { StatusBadge } from "./StatusBadge";
 
 type RouteListProps = {

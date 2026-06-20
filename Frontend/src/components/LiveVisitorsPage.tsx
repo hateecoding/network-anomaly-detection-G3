@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { liveVisitorSnapshots } from "../data/mockData";
+import { liveVisitorSnapshots } from "../data/presentationData";
 import { BarChart } from "./BarChart";
 import { DataColumn, DataTable } from "./DataTable";
 import { EmptyState } from "./EmptyState";
@@ -67,12 +67,12 @@ export function LiveVisitorsPage({ refreshNonce }: LiveVisitorsPageProps) {
   return (
     <div className="page-grid">
       <Panel
-        title="Visitor monitoring scope"
+        title="Visitor monitoring"
         subtitle="This page tracks traffic to your website and APIs. It is not doing full network packet capture."
       >
         <div className="hero-note-copy">
-          Frontend pages like this will usually poll the backend every 3 to 5 seconds for current
-          visitor metrics, suspicious request summaries, and route pressure.
+          The monitoring view refreshes current visitor metrics, suspicious request summaries,
+          and route pressure for analyst review.
         </div>
         <div className="inline-meta">
           <span>Auto refresh every 5s</span>
@@ -96,7 +96,7 @@ export function LiveVisitorsPage({ refreshNonce }: LiveVisitorsPageProps) {
         <SummaryCard
           label="Requests in 5 min"
           value={snapshot.totalRequestsLast5Minutes.toLocaleString()}
-          helper="Recent frontend and backend hits"
+          helper="Recent website and API requests"
           tone="normal"
         />
       </div>
@@ -130,13 +130,13 @@ export function LiveVisitorsPage({ refreshNonce }: LiveVisitorsPageProps) {
           ) : (
             <EmptyState
               title="No suspicious requests"
-              description="This area will show request bursts and suspicious route access once the backend is connected."
+              description="This area shows request bursts and suspicious route access when activity is detected."
             />
           )}
         </Panel>
 
         <div className="dashboard-side-stack">
-          <Panel title="Top suspicious IPs" subtitle="Highest-pressure visitors in the current sample window.">
+          <Panel title="Top suspicious IPs" subtitle="Highest-pressure visitors in the current monitoring window.">
             <DataTable
               columns={suspiciousIpColumns}
               rows={snapshot.suspiciousIps}
@@ -144,7 +144,7 @@ export function LiveVisitorsPage({ refreshNonce }: LiveVisitorsPageProps) {
             />
           </Panel>
 
-          <Panel title="Activity feed" subtitle="Latest visitor-related events returned to the frontend.">
+          <Panel title="Activity feed" subtitle="Latest visitor-related events from the monitoring service.">
             <div className="activity-feed">
               {snapshot.activityFeed.map((item) => (
                 <article key={item.id} className="activity-feed-item">

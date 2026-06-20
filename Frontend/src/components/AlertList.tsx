@@ -1,4 +1,4 @@
-import { AlertRecord } from "../data/mockData";
+import { AlertRecord } from "../data/presentationData";
 import { StatusBadge } from "./StatusBadge";
 
 type AlertListProps = {

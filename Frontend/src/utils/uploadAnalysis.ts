@@ -1,5 +1,5 @@
-import { ApiError, requestJson } from "./api";
-import type { AlertRecord, UploadAnalysisRow } from "../data/mockData";
+import { requestJson } from "./api";
+import type { AlertRecord, UploadAnalysisRow } from "../data/presentationData";
 
 type UploadAnalysisResult = {
   rows: UploadAnalysisRow[];
@@ -60,32 +60,11 @@ export async function analyzeUploadedFile(file: File): Promise<UploadAnalysisRes
     });
 
     return mapUploadAnalysis(response);
-  } catch (error) {
-    if (error instanceof ApiError && error.status === 404) {
-      throw new Error(
-        "The backend /upload-log endpoint is not deployed yet. Deploy the updated backend, then try this upload again.",
-      );
-    }
-
-    throw error;
+  } catch {
+    throw new Error(
+      "Analysis failed. Please check the uploaded file format or backend service.",
+    );
   }
-}
-
-export function loadDemoUploadAnalysis(rows: UploadAnalysisRow[]): UploadAnalysisResult {
-  const suspiciousRecords = rows.filter((row) => row.prediction === "Suspicious").length;
-  const attackRecords = rows.filter((row) => row.prediction === "Attack").length;
-  const normalRecords = rows.filter((row) => row.prediction === "Normal").length;
-
-  return {
-    rows,
-    alerts: [],
-    summary: {
-      totalRecords: rows.length,
-      suspiciousRecords,
-      normalRecords,
-      attackRecords,
-    },
-  };
 }
 
 export function exportUploadRows(rows: UploadAnalysisRow[]) {

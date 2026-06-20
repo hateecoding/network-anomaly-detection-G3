@@ -1,4 +1,4 @@
-import { Tone } from "../data/mockData";
+import { Tone } from "../data/presentationData";
 import { StatusBadge } from "./StatusBadge";
 
 type SummaryCardProps = {

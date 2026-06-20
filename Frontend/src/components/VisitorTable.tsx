@@ -1,4 +1,4 @@
-import { VisitorRequest } from "../data/mockData";
+import { VisitorRequest } from "../data/presentationData";
 import { DataColumn, DataTable } from "./DataTable";
 import { StatusBadge } from "./StatusBadge";
 
