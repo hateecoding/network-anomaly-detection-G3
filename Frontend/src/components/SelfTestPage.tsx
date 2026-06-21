@@ -96,7 +96,7 @@ export function SelfTestPage() {
       <div className="analytics-grid">
         <Panel
           title="Manual prediction form"
-          subtitle="Send one traffic record to the FastAPI prediction endpoint."
+          subtitle="Send one record to /predict."
         >
           <div className="prediction-form-grid">
             <label className="input-group">
@@ -174,7 +174,7 @@ export function SelfTestPage() {
 
         <Panel
           title="Prediction output"
-          subtitle="AI classification result and derived attack probability."
+          subtitle="Result appears after prediction."
         >
           {result ? (
             <PredictionResultCard
@@ -189,7 +189,7 @@ export function SelfTestPage() {
           ) : (
             <EmptyState
               title="No prediction result yet"
-              description="Submit the form to run a real backend prediction."
+              description="Submit the form to run a backend prediction."
             />
           )}
         </Panel>

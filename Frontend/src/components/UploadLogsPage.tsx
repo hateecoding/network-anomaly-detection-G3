@@ -2,13 +2,14 @@ import { useDeferredValue, useEffect, useState } from "react";
 import { AlertRecord, emptyUploadStateMessage, UploadAnalysisRow } from "../data/presentationData";
 import { analyzeUploadedFile, exportUploadRows, UploadAnalysisResult } from "../utils/uploadAnalysis";
 import { AlertList } from "./AlertList";
-import { BarChart } from "./BarChart";
+import { D3BarChart } from "./D3BarChart";
+import { D3HistogramChart } from "./D3HistogramChart";
+import { D3LineChart } from "./D3LineChart";
+import { D3PieChart } from "./D3PieChart";
 import { DataColumn, DataTable } from "./DataTable";
 import { EmptyState } from "./EmptyState";
-import { LineChart } from "./LineChart";
 import { LoadingOverlay } from "./LoadingOverlay";
 import { Panel } from "./Panel";
-import { PieChart } from "./PieChart";
 import { StatusBadge } from "./StatusBadge";
 import { SummaryCard } from "./SummaryCard";
 import { UploadBox } from "./UploadBox";
@@ -94,6 +95,7 @@ export function UploadLogsPage() {
   });
   const statusTone = state.type === "idle" ? "info" : state.type;
   const deferredQuery = useDeferredValue(query);
+  const hasAnalysis = state.type === "success" && analysis !== null;
 
   const filteredRows = sortRows(
     rows.filter((row) => {
@@ -166,7 +168,7 @@ export function UploadLogsPage() {
     <div className="page-grid">
       <Panel
         title="Upload and analyze"
-        subtitle="Upload a CSV log file and review the model prediction result returned by the FastAPI backend."
+        subtitle="Upload a CSV dataset to generate AI analysis."
       >
         <UploadBox file={selectedFile} onSelectFile={setSelectedFile} disabled={state.type === "loading"} />
 
@@ -178,6 +180,15 @@ export function UploadLogsPage() {
         </div>
       </Panel>
 
+      {!hasAnalysis ? (
+        <EmptyState
+          title="Upload a CSV dataset to generate AI analysis."
+          description="Summary metrics, charts, and row results appear after the backend processes a file."
+        />
+      ) : null}
+
+      {hasAnalysis ? (
+        <>
       <div className="summary-grid upload-summary-grid">
         <SummaryCard
           label="Total analyzed rows"
@@ -229,7 +240,7 @@ export function UploadLogsPage() {
         />
       </div>
 
-      <Panel title="Processing details" subtitle="Latest backend result metadata for the uploaded dataset.">
+      <Panel title="Processing details" subtitle="Latest backend result.">
         <div className="result-meta-grid">
           <MetaItem label="Last processed filename" value={analysis?.summary.filename ?? selectedFile?.name ?? "No file processed"} />
           <MetaItem label="Last updated timestamp" value={analysis ? formatTimestamp(analysis.summary.updatedAt) : "Not available"} />
@@ -239,9 +250,9 @@ export function UploadLogsPage() {
       </Panel>
 
       <div className="analytics-grid">
-        <Panel title="Traffic composition" subtitle="Normal, suspicious, and attack balance from the processed dataset.">
+        <Panel title="Traffic composition" subtitle="Classification balance.">
           {analysis ? (
-            <PieChart
+            <D3PieChart
               segments={analysis.charts.composition}
               centerLabel="Attack rate"
               centerValue={`${formatDecimal(analysis.summary.attackPercentage)}%`}
@@ -251,9 +262,9 @@ export function UploadLogsPage() {
           )}
         </Panel>
 
-        <Panel title="Anomaly and attack trend" subtitle="Aggregated by record ranges so large uploads stay responsive.">
+        <Panel title="Anomaly trend" subtitle="Grouped by row ranges.">
           {analysis && analysis.charts.trend.length > 0 ? (
-            <LineChart
+            <D3LineChart
               series={[
                 {
                   key: "suspicious",
@@ -276,26 +287,26 @@ export function UploadLogsPage() {
       </div>
 
       <div className="analytics-grid">
-        <Panel title="Protocol distribution" subtitle="Protocol mix in the uploaded dataset response.">
+        <Panel title="Protocol distribution" subtitle="Protocol mix from analyzed rows.">
           {analysis && analysis.charts.protocols.length > 0 ? (
-            <BarChart data={analysis.charts.protocols} />
+            <D3BarChart data={analysis.charts.protocols} />
           ) : (
             <EmptyState title="No protocol data" description="Protocol distribution appears when records include protocol fields." />
           )}
         </Panel>
 
-        <Panel title="Top suspicious source IPs" subtitle="Highest-volume sources among suspicious or attack rows.">
+        <Panel title="Top suspicious source IPs" subtitle="Highest-volume flagged sources.">
           {analysis && analysis.charts.topSourceIps.length > 0 ? (
-            <BarChart data={analysis.charts.topSourceIps} />
+            <D3BarChart data={analysis.charts.topSourceIps} />
           ) : (
             <EmptyState title="No suspicious sources" description="Source IP concentration appears when suspicious or attack rows are present." />
           )}
         </Panel>
       </div>
 
-      <Panel title="Confidence distribution" subtitle="Prediction confidence grouped into safe chart buckets.">
+      <Panel title="Confidence distribution" subtitle="Prediction confidence buckets.">
         {analysis ? (
-          <BarChart data={analysis.charts.confidenceBuckets} height={240} />
+          <D3HistogramChart data={analysis.charts.confidenceBuckets} height={240} />
         ) : (
           <EmptyState title="No confidence data" description="Confidence distribution appears after a successful backend analysis." />
         )}
@@ -303,7 +314,7 @@ export function UploadLogsPage() {
 
       <Panel
         title="Analyzed result table"
-        subtitle="Paginated investigation view prioritized by suspicious and attack rows."
+        subtitle="Paginated investigation view."
         aside={
           filteredRows.length > 0 ? (
             <button
@@ -401,7 +412,7 @@ export function UploadLogsPage() {
         </div>
       </Panel>
 
-      <Panel title="Upload alerts" subtitle="Backend alert records generated from rows above normal risk.">
+      <Panel title="Upload alerts" subtitle="Rows above normal risk.">
         {alerts.length > 0 ? (
           <AlertList alerts={alerts} />
         ) : (
@@ -411,6 +422,8 @@ export function UploadLogsPage() {
           />
         )}
       </Panel>
+      </>
+      ) : null}
     </div>
   );
 }

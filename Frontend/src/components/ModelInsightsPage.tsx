@@ -7,7 +7,7 @@ import {
   ModelInsightsData,
   ModelMetricName,
 } from "../utils/modelInsights";
-import { BarChart } from "./BarChart";
+import { D3BarChart } from "./D3BarChart";
 import { DataColumn, DataTable } from "./DataTable";
 import { EmptyState } from "./EmptyState";
 import { LoadingOverlay } from "./LoadingOverlay";
@@ -105,11 +105,8 @@ export function ModelInsightsPage() {
     <div className="page-grid">
       <Panel
         title="Model insights"
-        subtitle="Backend model metadata loaded from the deployed model metrics endpoint."
+        subtitle="Backend model metrics."
       >
-        <div className="hero-note-copy">
-          This page reports model performance metadata exposed by FastAPI. It does not invent training results when metadata is unavailable.
-        </div>
         <div className="inline-meta">
           <span>{status.message}</span>
           <span>Selection metric: {data?.selectionMetric?.toUpperCase() ?? "Not available"}</span>
@@ -151,32 +148,16 @@ export function ModelInsightsPage() {
       </div>
 
       <div className="analytics-grid">
-        <MetricChartPanel title="Model comparison" metric="f1" data={data} subtitle="F1-score comparison across available models." />
-        <MetricChartPanel title="Accuracy comparison" metric="accuracy" data={data} subtitle="Accuracy reported by backend model metadata." />
+        <MetricChartPanel title="Model comparison" metric="f1" data={data} subtitle="F1-score by model." />
+        <MetricChartPanel title="Accuracy comparison" metric="accuracy" data={data} subtitle="Accuracy by model." />
       </div>
 
       <div className="analytics-grid">
-        <MetricChartPanel title="Precision comparison" metric="precision" data={data} subtitle="Precision reported by backend model metadata." />
-        <MetricChartPanel title="Recall comparison" metric="recall" data={data} subtitle="Recall reported by backend model metadata." />
+        <MetricChartPanel title="Precision comparison" metric="precision" data={data} subtitle="Precision by model." />
+        <MetricChartPanel title="Recall comparison" metric="recall" data={data} subtitle="Recall by model." />
       </div>
 
-      <div className="analytics-grid">
-        <Panel title="Confusion matrix" subtitle="Shown when backend exposes confusion-matrix metadata.">
-          <EmptyState
-            title="Confusion matrix not available"
-            description="The current backend model metrics response does not include confusion-matrix values."
-          />
-        </Panel>
-
-        <Panel title="Confidence distribution" subtitle="Shown when backend exposes prediction confidence buckets.">
-          <EmptyState
-            title="Confidence distribution not available"
-            description="The current backend model metrics response does not include confidence bucket metadata."
-          />
-        </Panel>
-      </div>
-
-      <Panel title="Model comparison table" subtitle="Raw model metrics returned by the backend.">
+      <Panel title="Model comparison table">
         <div className="panel-table-wrap">
           {status.type === "loading" ? <LoadingOverlay message="Loading model metrics..." /> : null}
           {data && data.items.length > 0 ? (
@@ -184,7 +165,7 @@ export function ModelInsightsPage() {
           ) : (
             <EmptyState
               title={status.type === "error" ? "Unable to load model metrics" : "No model metrics available"}
-              description={status.type === "error" ? "Please check the backend service and model metrics endpoint." : "Model metrics will appear after the backend returns model metadata."}
+              description={status.type === "error" ? "Check the backend model metrics endpoint." : "Model metrics appear when backend metadata is available."}
             />
           )}
         </div>
@@ -217,7 +198,7 @@ function MetricChartPanel({
   return (
     <Panel title={title} subtitle={subtitle}>
       {chartData.length > 0 ? (
-        <BarChart data={chartData} />
+        <D3BarChart data={chartData} />
       ) : (
         <EmptyState
           title={`${title} unavailable`}

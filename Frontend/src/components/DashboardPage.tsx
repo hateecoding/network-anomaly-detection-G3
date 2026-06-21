@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { fetchDashboardBackendData, type DashboardBackendData } from "../utils/dashboard";
 import { AlertList } from "./AlertList";
+import { D3LineChart } from "./D3LineChart";
+import { D3PieChart } from "./D3PieChart";
 import { EmptyState } from "./EmptyState";
-import { LineChart } from "./LineChart";
 import { Panel } from "./Panel";
-import { PieChart } from "./PieChart";
 import { PredictionResultCard } from "./PredictionResultCard";
 import { RouteList } from "./RouteList";
 import { SummaryCard } from "./SummaryCard";
@@ -67,9 +67,7 @@ export function DashboardPage() {
       <div className="hero-note panel">
         <div>
           <p className="eyebrow">AI Security Operations</p>
-          <h3>
-            Unified view of uploaded analysis, visitor activity, alerts, and AI prediction results.
-          </h3>
+          <h3>Security overview</h3>
           <p className={`hero-note-copy inline-message-${status.type}`}>{status.message}</p>
         </div>
       </div>
@@ -88,9 +86,9 @@ export function DashboardPage() {
       </div>
 
       <div className="analytics-grid">
-        <Panel title="Normal vs flagged" subtitle="Uploaded result distribution for the latest analysis batch.">
+        <Panel title="Normal vs flagged" subtitle="Latest upload distribution.">
           {distribution.some((segment) => segment.value > 0) ? (
-            <PieChart
+            <D3PieChart
               centerLabel="Flagged"
               centerValue={flaggedCount.toLocaleString()}
               segments={distribution}
@@ -98,14 +96,14 @@ export function DashboardPage() {
           ) : (
             <EmptyState
               title="No backend activity recorded yet"
-              description="Upload analysis distribution appears after the backend processes a dataset."
+              description="Run an upload analysis to populate this chart."
             />
           )}
         </Panel>
 
-        <Panel title="Recent detections" subtitle="Detection counts over the latest monitoring window.">
+        <Panel title="Recent detections" subtitle="Backend detection history.">
           {trend.length > 0 ? (
-            <LineChart
+            <D3LineChart
               series={[
                 {
                   key: "normal",
@@ -139,26 +137,26 @@ export function DashboardPage() {
           ) : (
             <EmptyState
               title="No backend activity recorded yet"
-              description="Recent detection trends appear after upload analyses are processed."
+              description="Detection history appears after upload analyses."
             />
           )}
         </Panel>
       </div>
 
       <div className="dashboard-lower-grid">
-        <Panel title="Recent alerts" subtitle="Latest alerts worth showing on the landing view.">
+        <Panel title="Recent alerts">
           {alerts.length > 0 ? (
             <AlertList alerts={alerts} />
           ) : (
             <EmptyState
               title="No backend activity recorded yet"
-              description="Alerts will appear after uploads or visitor activity trigger backend rules."
+              description="Alerts appear after backend rules are triggered."
             />
           )}
         </Panel>
 
         <div className="dashboard-side-stack">
-          <Panel title="Visitor summary" subtitle="Current website activity snapshot, not full packet capture.">
+          <Panel title="Visitor summary">
             <div className="summary-grid compact-grid">
               {visitorMetrics.length > 0 ? (
                 visitorMetrics.map((metric) => (
@@ -167,24 +165,24 @@ export function DashboardPage() {
               ) : (
                 <EmptyState
                   title="No backend activity recorded yet"
-                  description="Visitor metrics appear after backend request or page-view activity is recorded."
+                  description="Visitor metrics appear after backend activity."
                 />
               )}
             </div>
           </Panel>
 
-          <Panel title="Suspicious routes" subtitle="Top routes drawing suspicious traffic or repeated probing.">
+          <Panel title="Top routes">
             {topRoutes.length > 0 ? (
               <RouteList routes={topRoutes} />
             ) : (
               <EmptyState
                 title="No backend activity recorded yet"
-                description="Route activity appears after FastAPI receives requests."
+                description="Route activity appears after backend requests."
               />
             )}
           </Panel>
 
-          <Panel title="Latest self-test" subtitle="Most recent manual prediction run from the self-test page.">
+          <Panel title="Latest self-test">
             {selfTest ? (
               <PredictionResultCard
                 confidence={selfTest.confidence}
@@ -196,7 +194,7 @@ export function DashboardPage() {
             ) : (
               <EmptyState
                 title="No backend prediction recorded yet"
-                description="Run a self-test prediction to populate this section."
+                description="Run a self-test prediction to populate this card."
               />
             )}
           </Panel>

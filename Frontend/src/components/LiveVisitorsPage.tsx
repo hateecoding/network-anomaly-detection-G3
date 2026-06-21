@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { SuspiciousVisitor } from "../data/presentationData";
 import { fetchLiveTrafficData, type LiveTrafficData } from "../utils/liveVisitors";
-import { BarChart } from "./BarChart";
+import { D3BarChart } from "./D3BarChart";
 import { DataColumn, DataTable } from "./DataTable";
 import { EmptyState } from "./EmptyState";
 import { LoadingOverlay } from "./LoadingOverlay";
@@ -97,11 +97,8 @@ export function LiveVisitorsPage({ refreshNonce }: LiveVisitorsPageProps) {
     <div className="page-grid">
       <Panel
         title="Backend activity monitoring"
-        subtitle="This page tracks requests reaching the FastAPI backend and frontend page-view pings. It is not full Amplify visitor analytics or packet capture."
+        subtitle="Live FastAPI requests and page-view pings."
       >
-        <div className="hero-note-copy">
-          Activity refreshes from the deployed backend every 5 seconds using the live visitors and top routes endpoints.
-        </div>
         <div className="inline-meta">
           <span>Auto refresh every 5s</span>
           <span>{status.message}</span>
@@ -131,9 +128,9 @@ export function LiveVisitorsPage({ refreshNonce }: LiveVisitorsPageProps) {
       </div>
 
       <div className="analytics-grid">
-        <Panel title="Top backend routes" subtitle="Request volume by route in the latest 5-minute backend window.">
+        <Panel title="Top routes" subtitle="Last 5 minutes.">
           {traffic && traffic.topRoutes.length > 0 ? (
-            <BarChart
+            <D3BarChart
               data={traffic.topRoutes.map((route) => ({
                 label: route.route,
                 value: route.totalHits,
@@ -144,25 +141,25 @@ export function LiveVisitorsPage({ refreshNonce }: LiveVisitorsPageProps) {
           ) : (
             <EmptyState
               title="No live backend activity recorded yet"
-              description="Routes will appear here after the backend receives requests or page-view pings."
+              description="Routes appear after backend requests or page-view pings."
             />
           )}
         </Panel>
 
-        <Panel title="Route pressure" subtitle="Routes with total request counts and flagged activity from the backend tracker.">
+        <Panel title="Route pressure">
           {traffic && traffic.topRoutes.length > 0 ? (
             <RouteList routes={traffic.topRoutes} />
           ) : (
             <EmptyState
               title="No route pressure yet"
-              description="Route pressure appears when FastAPI records recent request activity."
+              description="Route pressure appears after recent backend activity."
             />
           )}
         </Panel>
       </div>
 
       <div className="dashboard-lower-grid">
-        <Panel title="Recent backend requests" subtitle="Latest FastAPI requests and frontend page-view pings in the active window.">
+        <Panel title="Recent activity">
           <div className="panel-table-wrap">
             {status.type === "loading" ? <LoadingOverlay message="Loading live traffic..." /> : null}
             {traffic && traffic.recentRequests.length > 0 ? (
@@ -170,14 +167,14 @@ export function LiveVisitorsPage({ refreshNonce }: LiveVisitorsPageProps) {
             ) : (
               <EmptyState
                 title={status.type === "error" ? "Unable to load live traffic. Please try again." : "No live backend activity recorded yet"}
-                description={status.type === "error" ? "The monitoring endpoint is currently unavailable." : "Open pages or call backend endpoints to populate this activity stream."}
+                description={status.type === "error" ? "The monitoring endpoint is unavailable." : "Open pages or call backend endpoints to populate activity."}
               />
             )}
           </div>
         </Panel>
 
         <div className="dashboard-side-stack">
-          <Panel title="Visitor identifiers" subtitle="Anonymized frontend visitors or backend source identifiers seen recently.">
+          <Panel title="Visitor identifiers">
             {traffic && traffic.visitorIdentifiers.length > 0 ? (
               <DataTable
                 columns={visitorColumns}
@@ -187,23 +184,23 @@ export function LiveVisitorsPage({ refreshNonce }: LiveVisitorsPageProps) {
             ) : (
               <EmptyState
                 title="No recent visitor identifiers"
-                description="Identifiers appear after FastAPI records request or page-view activity."
+                description="Identifiers appear after backend activity."
               />
             )}
           </Panel>
 
-          <Panel title="Suspicious request stream" subtitle="Recent requests flagged by the backend monitoring rules.">
+          <Panel title="Suspicious requests">
             {traffic && traffic.suspiciousRequests.length > 0 ? (
               <VisitorTable rows={traffic.suspiciousRequests} />
             ) : (
               <EmptyState
                 title="No suspicious requests"
-                description={hasActivity ? "Recent activity is currently below suspicious thresholds." : "Suspicious requests appear when backend thresholds are breached."}
+                description={hasActivity ? "Recent activity is below thresholds." : "Suspicious requests appear when thresholds are breached."}
               />
             )}
           </Panel>
 
-          <Panel title="Activity feed" subtitle="Latest live activity returned by the monitoring service.">
+          <Panel title="Activity feed">
             {traffic && traffic.activityFeed.length > 0 ? (
               <div className="activity-feed">
                 {traffic.activityFeed.map((item) => (
