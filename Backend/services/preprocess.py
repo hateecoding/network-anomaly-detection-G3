@@ -7,11 +7,6 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from sklearn.compose import ColumnTransformer
-from sklearn.impute import SimpleImputer
-from sklearn.model_selection import train_test_split
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, RobustScaler
 
 from schemas import TrafficInput
 
@@ -20,13 +15,6 @@ PROJECT_ROOT = BASE_DIR.parent
 FEATURE_COLUMNS_CANDIDATES = (
     BASE_DIR / "feature_columns.json",
     BASE_DIR / "anomaly-model-artifacts" / "feature_columns.json",
-)
-REFERENCE_DATASET_CANDIDATES = (
-    PROJECT_ROOT
-    / "outputs"
-    / "final_unified_pipeline"
-    / "processed_datasets"
-    / "combined_unsw_nsl_kdd_harmonized.csv",
 )
 
 SEED = 314159
@@ -313,48 +301,6 @@ def normalize_connection_group(value: object) -> str:
     return group_connection(value)
 
 
-def build_preprocessor() -> ColumnTransformer:
-    return ColumnTransformer(
-        transformers=[
-            (
-                "num",
-                Pipeline(
-                    steps=[
-                        ("imputer", SimpleImputer(strategy="median")),
-                        ("scaler", RobustScaler()),
-                    ]
-                ),
-                NUMERIC_FEATURES,
-            ),
-            (
-                "cat",
-                Pipeline(
-                    steps=[
-                        ("imputer", SimpleImputer(strategy="most_frequent")),
-                        (
-                            "onehot",
-                            OneHotEncoder(handle_unknown="ignore", sparse_output=False),
-                        ),
-                    ]
-                ),
-                CATEGORICAL_FEATURES,
-            ),
-        ],
-        remainder="drop",
-        verbose_feature_names_out=False,
-    )
-
-
-def _resolve_reference_dataset_path() -> Path:
-    for path in REFERENCE_DATASET_CANDIDATES:
-        if path.exists():
-            return path
-
-    raise FileNotFoundError(
-        "combined_unsw_nsl_kdd_harmonized.csv was not found in outputs/final_unified_pipeline/processed_datasets/."
-    )
-
-
 @lru_cache(maxsize=1)
 def get_feature_columns() -> list[str]:
     for path in FEATURE_COLUMNS_CANDIDATES:
@@ -365,51 +311,6 @@ def get_feature_columns() -> list[str]:
     raise FileNotFoundError(
         "feature_columns.json was not found in backend/ or backend/anomaly-model-artifacts/."
     )
-
-
-@lru_cache(maxsize=1)
-def get_model_preprocessor() -> ColumnTransformer:
-    dataset_path = _resolve_reference_dataset_path()
-    combined_df = pd.read_csv(dataset_path)
-
-    missing_columns = [
-        column for column in TRAINING_COLUMNS + ["label_binary"] if column not in combined_df.columns
-    ]
-    if missing_columns:
-        raise ValueError(
-            "Reference training dataset is missing required columns: "
-            + ", ".join(missing_columns)
-        )
-
-    features = combined_df[TRAINING_COLUMNS].copy()
-    labels = combined_df["label_binary"].copy()
-
-    X_train, X_temp, y_train, y_temp = train_test_split(
-        features,
-        labels,
-        test_size=0.25,
-        random_state=SEED,
-        stratify=labels,
-    )
-    train_test_split(
-        X_temp,
-        y_temp,
-        test_size=0.60,
-        random_state=SEED,
-        stratify=y_temp,
-    )
-
-    preprocessor = build_preprocessor()
-    preprocessor.fit(X_train)
-
-    learned_features = list(preprocessor.get_feature_names_out())
-    expected_features = get_feature_columns()
-    if learned_features != expected_features:
-        raise ValueError(
-            "The reconstructed preprocessing pipeline does not match feature_columns.json."
-        )
-
-    return preprocessor
 
 
 def _build_source_lookup(raw_df: pd.DataFrame) -> dict[str, str]:
@@ -741,6 +642,20 @@ def align_features(df_incoming: pd.DataFrame) -> pd.DataFrame:
     return aligned_df[expected_features].fillna(0.0)
 
 
+def encode_features(model_input_df: pd.DataFrame) -> pd.DataFrame:
+    encoded_df = pd.DataFrame(index=model_input_df.index)
+
+    for column in NUMERIC_FEATURES:
+        encoded_df[column] = safe_numeric(model_input_df[column]).fillna(0.0)
+
+    for column in CATEGORICAL_FEATURES:
+        values = model_input_df[column].fillna(DEFAULT_CATEGORICAL_VALUES[column]).astype(str)
+        dummies = pd.get_dummies(values, prefix=column, dtype=float)
+        encoded_df = pd.concat([encoded_df, dummies], axis=1)
+
+    return align_features(encoded_df).astype(float)
+
+
 def apply_known_headerless_schema(raw_df: pd.DataFrame) -> pd.DataFrame:
     if len(raw_df.columns) == len(HEADERLESS_UNSW_RAW_COLUMNS):
         headerless_df = raw_df.copy()
@@ -773,14 +688,7 @@ def prepare_batch_input(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFram
             "Uploaded data does not contain supported network traffic feature columns."
         )
 
-    preprocessor = get_model_preprocessor()
-    transformed = preprocessor.transform(model_input_df)
-    transformed_df = pd.DataFrame(
-        transformed,
-        columns=preprocessor.get_feature_names_out(),
-        index=model_input_df.index,
-    )
-    processed_df = align_features(transformed_df).astype(float)
+    processed_df = encode_features(model_input_df)
     return processed_df, context_df
 
 
