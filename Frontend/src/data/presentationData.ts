@@ -33,6 +33,7 @@ export type RouteStat = {
 
 export type UploadAnalysisRow = {
   rowId: string;
+  recordNumber: number;
   sourceIp: string;
   destinationIp: string;
   protocol: string;
@@ -40,7 +41,9 @@ export type UploadAnalysisRow = {
   duration: number;
   prediction: "Normal" | "Suspicious" | "Attack";
   confidence: number;
+  attackProbability: number;
   alertLevel: "Low" | "Medium" | "High";
+  detectionResult: "SAFE" | "THREAT DETECTED";
 };
 
 export type SuspiciousVisitor = {
