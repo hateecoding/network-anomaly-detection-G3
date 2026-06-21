@@ -4,6 +4,7 @@ import { Layout, type PageId } from "./components/Layout";
 import { LiveVisitorsPage } from "./components/LiveVisitorsPage";
 import { SelfTestPage } from "./components/SelfTestPage";
 import { UploadLogsPage } from "./components/UploadLogsPage";
+import { trackFrontendVisit } from "./utils/liveVisitors";
 
 const validPages: PageId[] = ["dashboard", "upload", "visitors", "self-test"];
 
@@ -20,6 +21,10 @@ export default function App() {
     window.addEventListener("hashchange", handleHashChange);
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
+
+  useEffect(() => {
+    void trackFrontendVisit(getTrackedRoute(activePage)).catch(() => undefined);
+  }, [activePage]);
 
   const handleRefresh = () => {
     setRefreshNonce((value) => value + 1);
@@ -44,6 +49,10 @@ export default function App() {
       {activePage === "self-test" ? <SelfTestPage /> : null}
     </Layout>
   );
+}
+
+function getTrackedRoute(page: PageId) {
+  return page === "dashboard" ? "/dashboard" : `/${page}`;
 }
 
 function getPageFromHash(): PageId {

@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { liveVisitorSnapshots } from "../data/presentationData";
+import { SuspiciousVisitor } from "../data/presentationData";
+import { fetchLiveTrafficData, type LiveTrafficData } from "../utils/liveVisitors";
 import { BarChart } from "./BarChart";
 import { DataColumn, DataTable } from "./DataTable";
 import { EmptyState } from "./EmptyState";
+import { LoadingOverlay } from "./LoadingOverlay";
 import { Panel } from "./Panel";
 import { RouteList } from "./RouteList";
 import { SummaryCard } from "./SummaryCard";
@@ -12,10 +14,10 @@ type LiveVisitorsPageProps = {
   refreshNonce: number;
 };
 
-const suspiciousIpColumns: DataColumn<(typeof liveVisitorSnapshots)[number]["suspiciousIps"][number]>[] = [
+const visitorColumns: DataColumn<SuspiciousVisitor>[] = [
   {
     key: "ip",
-    header: "IP / route",
+    header: "Visitor / route",
     render: (row) => (
       <div>
         <strong>{row.ip}</strong>
@@ -31,7 +33,7 @@ const suspiciousIpColumns: DataColumn<(typeof liveVisitorSnapshots)[number]["sus
   },
   {
     key: "reason",
-    header: "Reason",
+    header: "Activity",
     render: (row) => row.reason,
   },
   {
@@ -42,120 +44,184 @@ const suspiciousIpColumns: DataColumn<(typeof liveVisitorSnapshots)[number]["sus
 ];
 
 export function LiveVisitorsPage({ refreshNonce }: LiveVisitorsPageProps) {
-  const [snapshotIndex, setSnapshotIndex] = useState(0);
-  const [lastUpdatedAt, setLastUpdatedAt] = useState(new Date());
+  const [traffic, setTraffic] = useState<LiveTrafficData | null>(null);
+  const [status, setStatus] = useState<{
+    type: "loading" | "success" | "error";
+    message: string;
+  }>({
+    type: "loading",
+    message: "Loading live traffic...",
+  });
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      setSnapshotIndex((value) => (value + 1) % liveVisitorSnapshots.length);
-      setLastUpdatedAt(new Date());
-    }, 5000);
+    let active = true;
 
-    return () => window.clearInterval(timer);
-  }, []);
+    const loadTraffic = async (showLoading = false) => {
+      if (showLoading) {
+        setStatus({ type: "loading", message: "Loading live traffic..." });
+      }
 
-  useEffect(() => {
-    if (refreshNonce === 0) {
-      return;
-    }
-    setSnapshotIndex((value) => (value + 1) % liveVisitorSnapshots.length);
-    setLastUpdatedAt(new Date());
+      try {
+        const nextTraffic = await fetchLiveTrafficData();
+        if (!active) {
+          return;
+        }
+        setTraffic(nextTraffic);
+        setStatus({
+          type: "success",
+          message: "Live backend activity refreshed.",
+        });
+      } catch {
+        if (!active) {
+          return;
+        }
+        setStatus({
+          type: "error",
+          message: "Unable to load live traffic. Please try again.",
+        });
+      }
+    };
+
+    loadTraffic(true);
+    const timer = window.setInterval(() => loadTraffic(false), 5000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
   }, [refreshNonce]);
 
-  const snapshot = liveVisitorSnapshots[snapshotIndex];
+  const hasActivity = Boolean(traffic && traffic.totalRequestsLast5Minutes > 0);
 
   return (
     <div className="page-grid">
       <Panel
-        title="Visitor monitoring"
-        subtitle="This page tracks traffic to your website and APIs. It is not doing full network packet capture."
+        title="Backend activity monitoring"
+        subtitle="This page tracks requests reaching the FastAPI backend and frontend page-view pings. It is not full Amplify visitor analytics or packet capture."
       >
         <div className="hero-note-copy">
-          The monitoring view refreshes current visitor metrics, suspicious request summaries,
-          and route pressure for analyst review.
+          Activity refreshes from the deployed backend every 5 seconds using the live visitors and top routes endpoints.
         </div>
         <div className="inline-meta">
           <span>Auto refresh every 5s</span>
-          <span>Last update {formatTime(lastUpdatedAt)}</span>
+          <span>{status.message}</span>
+          <span>Last update {traffic ? formatTimestamp(traffic.generatedAt) : "Not available"}</span>
         </div>
       </Panel>
 
       <div className="summary-grid">
         <SummaryCard
           label="Active visitors"
-          value={snapshot.activeVisitors.toString()}
-          helper="Distinct website visitors in the active window"
+          value={(traffic?.activeVisitors ?? 0).toLocaleString()}
+          helper="Distinct backend visitors in the active window"
           tone="info"
         />
         <SummaryCard
           label="Suspicious visitors"
-          value={snapshot.suspiciousVisitors.toString()}
-          helper="Visitors currently breaching simple thresholds"
+          value={(traffic?.suspiciousVisitors ?? 0).toLocaleString()}
+          helper="Visitors breaching backend monitoring thresholds"
           tone="suspicious"
         />
         <SummaryCard
           label="Requests in 5 min"
-          value={snapshot.totalRequestsLast5Minutes.toLocaleString()}
-          helper="Recent website and API requests"
+          value={(traffic?.totalRequestsLast5Minutes ?? 0).toLocaleString()}
+          helper="Recent FastAPI requests and tracked page views"
           tone="normal"
         />
       </div>
 
       <div className="analytics-grid">
-        <Panel title="Top visited routes" subtitle="D3 route chart for the latest 5-minute window.">
-          <BarChart
-            data={snapshot.topRoutes.map((route) => ({
-              label: route.route,
-              value: route.totalHits,
-              suffix: "",
-              color:
-                route.tone === "attack"
-                  ? "#f97316"
-                  : route.tone === "suspicious"
-                    ? "#fbbf24"
-                    : "#60a5fa",
-            }))}
-          />
-        </Panel>
-
-        <Panel title="Suspicious route list" subtitle="Routes with the highest suspicious hit count right now.">
-          <RouteList routes={snapshot.topRoutes} />
-        </Panel>
-      </div>
-
-      <div className="dashboard-lower-grid">
-        <Panel title="Recent suspicious requests" subtitle="Suspicious request stream returned by the live visitors endpoint.">
-          {snapshot.suspiciousRequests.length > 0 ? (
-            <VisitorTable rows={snapshot.suspiciousRequests} />
+        <Panel title="Top backend routes" subtitle="Request volume by route in the latest 5-minute backend window.">
+          {traffic && traffic.topRoutes.length > 0 ? (
+            <BarChart
+              data={traffic.topRoutes.map((route) => ({
+                label: route.route,
+                value: route.totalHits,
+                suffix: "",
+                color: route.suspiciousHits > 0 ? "#fbbf24" : "#60a5fa",
+              }))}
+            />
           ) : (
             <EmptyState
-              title="No suspicious requests"
-              description="This area shows request bursts and suspicious route access when activity is detected."
+              title="No live backend activity recorded yet"
+              description="Routes will appear here after the backend receives requests or page-view pings."
             />
           )}
         </Panel>
 
-        <div className="dashboard-side-stack">
-          <Panel title="Top suspicious IPs" subtitle="Highest-pressure visitors in the current monitoring window.">
-            <DataTable
-              columns={suspiciousIpColumns}
-              rows={snapshot.suspiciousIps}
-              rowKey={(row) => row.id}
+        <Panel title="Route pressure" subtitle="Routes with total request counts and flagged activity from the backend tracker.">
+          {traffic && traffic.topRoutes.length > 0 ? (
+            <RouteList routes={traffic.topRoutes} />
+          ) : (
+            <EmptyState
+              title="No route pressure yet"
+              description="Route pressure appears when FastAPI records recent request activity."
             />
+          )}
+        </Panel>
+      </div>
+
+      <div className="dashboard-lower-grid">
+        <Panel title="Recent backend requests" subtitle="Latest FastAPI requests and frontend page-view pings in the active window.">
+          <div className="panel-table-wrap">
+            {status.type === "loading" ? <LoadingOverlay message="Loading live traffic..." /> : null}
+            {traffic && traffic.recentRequests.length > 0 ? (
+              <VisitorTable rows={traffic.recentRequests} />
+            ) : (
+              <EmptyState
+                title={status.type === "error" ? "Unable to load live traffic. Please try again." : "No live backend activity recorded yet"}
+                description={status.type === "error" ? "The monitoring endpoint is currently unavailable." : "Open pages or call backend endpoints to populate this activity stream."}
+              />
+            )}
+          </div>
+        </Panel>
+
+        <div className="dashboard-side-stack">
+          <Panel title="Visitor identifiers" subtitle="Anonymized frontend visitors or backend source identifiers seen recently.">
+            {traffic && traffic.visitorIdentifiers.length > 0 ? (
+              <DataTable
+                columns={visitorColumns}
+                rows={traffic.visitorIdentifiers}
+                rowKey={(row) => row.id}
+              />
+            ) : (
+              <EmptyState
+                title="No recent visitor identifiers"
+                description="Identifiers appear after FastAPI records request or page-view activity."
+              />
+            )}
           </Panel>
 
-          <Panel title="Activity feed" subtitle="Latest visitor-related events from the monitoring service.">
-            <div className="activity-feed">
-              {snapshot.activityFeed.map((item) => (
-                <article key={item.id} className="activity-feed-item">
-                  <div className={`activity-dot activity-dot-${item.tone}`} />
-                  <div>
-                    <strong>{item.message}</strong>
-                    <span>{item.timestamp}</span>
-                  </div>
-                </article>
-              ))}
-            </div>
+          <Panel title="Suspicious request stream" subtitle="Recent requests flagged by the backend monitoring rules.">
+            {traffic && traffic.suspiciousRequests.length > 0 ? (
+              <VisitorTable rows={traffic.suspiciousRequests} />
+            ) : (
+              <EmptyState
+                title="No suspicious requests"
+                description={hasActivity ? "Recent activity is currently below suspicious thresholds." : "Suspicious requests appear when backend thresholds are breached."}
+              />
+            )}
+          </Panel>
+
+          <Panel title="Activity feed" subtitle="Latest live activity returned by the monitoring service.">
+            {traffic && traffic.activityFeed.length > 0 ? (
+              <div className="activity-feed">
+                {traffic.activityFeed.map((item) => (
+                  <article key={item.id} className="activity-feed-item">
+                    <div className={`activity-dot activity-dot-${item.tone}`} />
+                    <div>
+                      <strong>{item.message}</strong>
+                      <span>{item.timestamp}</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="No activity feed yet"
+                description="Live backend activity will appear here as soon as requests are recorded."
+              />
+            )}
           </Panel>
         </div>
       </div>
@@ -163,9 +229,10 @@ export function LiveVisitorsPage({ refreshNonce }: LiveVisitorsPageProps) {
   );
 }
 
-function formatTime(value: Date) {
+function formatTimestamp(value: string) {
   return new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
     minute: "2-digit",
-  }).format(value);
+    second: "2-digit",
+  }).format(new Date(value));
 }

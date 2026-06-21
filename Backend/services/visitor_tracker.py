@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter, deque
 from datetime import datetime, timedelta, timezone
+import hashlib
 from threading import Lock
 
 from fastapi import Request
@@ -27,6 +28,7 @@ IGNORED_PATHS = {
     "/alerts",
     "/live-visitors",
     "/top-routes",
+    "/track-visit",
 }
 IGNORED_PREFIXES = ("/docs", "/redoc", "/openapi.json")
 SENSITIVE_ROUTE_KEYWORDS = (
@@ -56,6 +58,27 @@ def _extract_client_ip(request: Request) -> str:
         return request.client.host
 
     return "unknown"
+
+
+def _anonymize_visitor(request: Request) -> str:
+    raw_identity = "|".join(
+        [
+            _extract_client_ip(request),
+            request.headers.get("user-agent", ""),
+            request.headers.get("accept-language", ""),
+        ]
+    )
+    digest = hashlib.sha256(raw_identity.encode("utf-8")).hexdigest()[:12]
+    return f"visitor-{digest}"
+
+
+def _normalize_frontend_route(route: str) -> str:
+    cleaned = route.strip()[:160] or "/"
+    if cleaned.startswith("#"):
+        cleaned = cleaned[1:]
+    if not cleaned.startswith("/"):
+        cleaned = f"/{cleaned}"
+    return cleaned
 
 
 class VisitorTracker:
@@ -122,6 +145,25 @@ class VisitorTracker:
                     "status_code": status_code,
                     "suspicious": suspicious,
                     "reason": reason,
+                }
+            )
+
+    def record_frontend_visit(self, request: Request, route: str) -> None:
+        now = utcnow()
+        path = _normalize_frontend_route(route)
+        visitor_id = _anonymize_visitor(request)
+
+        with self._lock:
+            self._prune(now)
+            self._events.append(
+                {
+                    "timestamp": now,
+                    "ip": visitor_id,
+                    "path": path,
+                    "method": "VIEW",
+                    "status_code": 200,
+                    "suspicious": False,
+                    "reason": "Frontend page activity recorded.",
                 }
             )
 

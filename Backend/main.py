@@ -24,6 +24,7 @@ from schemas import (
     LiveVisitorsResponse,
     ModelMetricsResponse,
     PredictionResponse,
+    TrackVisitInput,
     TopRoutesResponse,
     TrafficInput,
     UploadAnalysisResponse,
@@ -307,6 +308,16 @@ def alerts(limit: int = 25):
 def live_visitors(limit: int = 20):
     limit = max(1, min(limit, 100))
     return visitor_tracker.get_live_visitors(limit=limit)
+
+
+@app.post("/track-visit")
+def track_visit(payload: TrackVisitInput, request: Request):
+    visitor_tracker.record_frontend_visit(request=request, route=payload.route)
+    return {
+        "status": "recorded",
+        "route": payload.route,
+        "recorded_at": utcnow(),
+    }
 
 
 @app.get("/top-routes", response_model=TopRoutesResponse)

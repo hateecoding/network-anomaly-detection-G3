@@ -207,6 +207,11 @@ class LiveVisitorsResponse(BaseModel):
     latest_activity: list[LiveActivityEvent] = Field(default_factory=list)
 
 
+class TrackVisitInput(BaseModel):
+    route: str
+    timestamp: Optional[datetime] = None
+
+
 class TopRouteEntry(BaseModel):
     route: str
     request_count: int
