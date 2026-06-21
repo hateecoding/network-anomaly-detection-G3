@@ -24,6 +24,9 @@ html,
 body,
 #root {
   min-height: 100%;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 body {
@@ -62,6 +65,9 @@ button {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   min-height: 100vh;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: clip;
 }
 
 .sidebar {
@@ -181,6 +187,9 @@ button {
 
 .main-shell {
   padding: 28px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 .topbar {
@@ -189,6 +198,7 @@ button {
   gap: 16px;
   align-items: flex-start;
   margin-bottom: 20px;
+  min-width: 0;
 }
 
 .topbar-actions {
@@ -232,15 +242,22 @@ button {
 .page-content {
   display: grid;
   gap: 20px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .page-grid {
   display: grid;
   gap: 20px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .panel {
   position: relative;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   padding: 22px;
   border-radius: 22px;
   border: 1px solid var(--line);
@@ -269,12 +286,13 @@ button {
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   gap: 16px;
+  min-width: 0;
 }
 
 .upload-summary-grid {
-  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
 }
 
 .compact-grid {
@@ -282,6 +300,7 @@ button {
 }
 
 .summary-card {
+  min-width: 0;
   padding: 18px;
   border-radius: 18px;
   border: 1px solid var(--line);
@@ -305,6 +324,7 @@ button {
   margin: 14px 0 6px;
   font-size: 1.85rem;
   line-height: 1;
+  overflow-wrap: anywhere;
 }
 
 .summary-card-info {
@@ -325,19 +345,22 @@ button {
 
 .analytics-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
   gap: 20px;
+  min-width: 0;
 }
 
 .dashboard-lower-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr);
+  grid-template-columns: minmax(0, 1.5fr) minmax(min(100%, 320px), 1fr);
   gap: 20px;
+  min-width: 0;
 }
 
 .dashboard-side-stack {
   display: grid;
   gap: 20px;
+  min-width: 0;
 }
 
 .status-badge {
@@ -381,6 +404,8 @@ button {
 .chart-shell {
   display: grid;
   gap: 12px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .chart-legend {
@@ -404,9 +429,11 @@ button {
 }
 
 .d3-chart {
+  display: block;
+  max-width: 100%;
   width: 100%;
   height: auto;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .d3-axis text,
@@ -423,17 +450,22 @@ button {
 
 .pie-chart-shell {
   display: grid;
-  grid-template-columns: minmax(180px, 240px) 1fr;
+  grid-template-columns: minmax(min(100%, 180px), 240px) minmax(0, 1fr);
   gap: 20px;
   align-items: center;
+  min-width: 0;
 }
 
 .pie-chart-wrap {
   position: relative;
   width: 100%;
+  min-width: 0;
+  max-width: 240px;
 }
 
 .pie-chart {
+  display: block;
+  max-width: 100%;
   width: 100%;
   height: auto;
 }
@@ -533,6 +565,7 @@ button {
   justify-content: space-between;
   gap: 12px;
   align-items: center;
+  min-width: 0;
 }
 
 .route-list-item p,
@@ -597,8 +630,9 @@ button {
 
 .result-meta-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
   gap: 14px;
+  min-width: 0;
 }
 
 .result-meta-item {
@@ -657,10 +691,11 @@ button {
 
 .table-control-grid {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(180px, 220px) minmax(150px, 180px);
+  grid-template-columns: minmax(0, 1fr) minmax(min(100%, 180px), 220px) minmax(min(100%, 150px), 180px);
   gap: 14px;
   align-items: end;
   margin-bottom: 16px;
+  min-width: 0;
 }
 
 .control-label {
@@ -698,6 +733,7 @@ button {
 }
 
 .search-input {
+  min-width: 0;
   max-width: 420px;
 }
 
@@ -724,11 +760,16 @@ button {
 }
 
 .table-wrap {
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .panel-table-wrap {
   position: relative;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .pagination-row {
@@ -747,7 +788,7 @@ button {
 
 .data-table {
   width: 100%;
-  min-width: 860px;
+  min-width: min(760px, 100%);
   border-collapse: collapse;
 }
 
@@ -789,6 +830,7 @@ button {
 }
 
 .empty-state {
+  min-width: 0;
   padding: 32px 16px;
   text-align: center;
   border-radius: 16px;
