@@ -9,7 +9,7 @@ from threading import Lock
 
 import pandas as pd
 
-from backend.schemas import (
+from schemas import (
     AlertRecord,
     RecentDetectionPoint,
     UploadAnalysisResponse,
@@ -17,8 +17,8 @@ from backend.schemas import (
     UploadRecordResult,
     UploadSummary,
 )
-from backend.services.predict import predict_processed_frame
-from backend.services.preprocess import (
+from services.predict import predict_processed_frame
+from services.preprocess import (
     apply_known_headerless_schema,
     get_feature_columns,
     prepare_batch_input,

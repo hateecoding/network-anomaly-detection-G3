@@ -16,7 +16,7 @@ import warnings
 import joblib
 import pandas as pd
 
-from backend.schemas import (
+from schemas import (
     ModelMetricsItem,
     ModelMetricsResponse,
     ModelPerformanceMetrics,
@@ -24,10 +24,10 @@ from backend.schemas import (
     PredictionResponse,
     TrafficInput,
 )
-from backend.services.preprocess import prepare_single_record
+from services.preprocess import prepare_single_record
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = BASE_DIR.parent
 ARTIFACT_DIRS = (
     BASE_DIR,
     BASE_DIR / "anomaly-model-artifacts",

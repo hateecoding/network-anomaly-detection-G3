@@ -13,10 +13,10 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, RobustScaler
 
-from backend.schemas import TrafficInput
+from schemas import TrafficInput
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = BASE_DIR.parent
 FEATURE_COLUMNS_CANDIDATES = (
     BASE_DIR / "feature_columns.json",
     BASE_DIR / "anomaly-model-artifacts" / "feature_columns.json",

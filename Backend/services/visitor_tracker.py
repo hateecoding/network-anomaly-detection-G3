@@ -6,7 +6,7 @@ from threading import Lock
 
 from fastapi import Request
 
-from backend.schemas import (
+from schemas import (
     AlertRecord,
     LiveActivityEvent,
     LiveVisitorsResponse,

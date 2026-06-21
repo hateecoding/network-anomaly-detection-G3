@@ -18,7 +18,7 @@ PARENT_DIR = CURRENT_DIR.parent
 if str(PARENT_DIR) not in sys.path:
     sys.path.append(str(PARENT_DIR))
 
-from backend.schemas import (
+from schemas import (
     AlertsResponse,
     DashboardSummaryResponse,
     LiveVisitorsResponse,
@@ -28,15 +28,15 @@ from backend.schemas import (
     TrafficInput,
     UploadAnalysisResponse,
 )
-from backend.services.predict import (
+from services.predict import (
     ModelLoadingError,
     get_model_artifact_debug_info,
     get_model_metrics_response,
     prediction_history,
     predict_record,
 )
-from backend.services.upload_analysis import analyze_upload_file, upload_history
-from backend.services.visitor_tracker import visitor_tracker
+from services.upload_analysis import analyze_upload_file, upload_history
+from services.visitor_tracker import visitor_tracker
 
 
 def utcnow() -> datetime:
