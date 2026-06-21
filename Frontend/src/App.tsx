@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { DashboardPage } from "./components/DashboardPage";
 import { Layout, type PageId } from "./components/Layout";
 import { LiveVisitorsPage } from "./components/LiveVisitorsPage";
+import { ModelInsightsPage } from "./components/ModelInsightsPage";
 import { SelfTestPage } from "./components/SelfTestPage";
 import { UploadLogsPage } from "./components/UploadLogsPage";
 import { trackFrontendVisit } from "./utils/liveVisitors";
 
-const validPages: PageId[] = ["dashboard", "upload", "visitors", "self-test"];
+const validPages: PageId[] = ["dashboard", "upload", "visitors", "model-insights", "self-test"];
 
 export default function App() {
   const [activePage, setActivePage] = useState<PageId>(() => getPageFromHash());
@@ -46,6 +47,7 @@ export default function App() {
       {activePage === "dashboard" ? <DashboardPage /> : null}
       {activePage === "upload" ? <UploadLogsPage /> : null}
       {activePage === "visitors" ? <LiveVisitorsPage refreshNonce={refreshNonce} /> : null}
+      {activePage === "model-insights" ? <ModelInsightsPage /> : null}
       {activePage === "self-test" ? <SelfTestPage /> : null}
     </Layout>
   );

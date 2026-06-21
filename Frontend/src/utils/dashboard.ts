@@ -48,6 +48,12 @@ export type DashboardBackendData = {
   distribution: { label: string; value: number; tone: "info" | "suspicious" | "attack"; color: string }[];
   detectionTrend: DetectionTrendPoint[];
   alerts: AlertRecord[];
+  topRoutes: {
+    route: string;
+    totalHits: number;
+    suspiciousHits: number;
+    tone: "info" | "suspicious" | "attack" | "normal";
+  }[];
   latestSelfTest: {
     label: "Normal" | "Attack";
     confidence: number;
@@ -57,10 +63,19 @@ export type DashboardBackendData = {
   } | null;
 };
 
+type BackendTopRoutesResponse = {
+  items: {
+    route: string;
+    request_count: number;
+    suspicious_count: number;
+  }[];
+};
+
 export async function fetchDashboardBackendData(): Promise<DashboardBackendData> {
-  const [summary, alerts] = await Promise.all([
+  const [summary, alerts, routes] = await Promise.all([
     requestJson<BackendDashboardSummary>("/dashboard-summary"),
     requestJson<BackendAlertsResponse>("/alerts?limit=4"),
+    requestJson<BackendTopRoutesResponse>("/top-routes?limit=5"),
   ]);
 
   const attackRecords = Math.max(0, summary.total_suspicious);
@@ -134,6 +149,12 @@ export async function fetchDashboardBackendData(): Promise<DashboardBackendData>
       route: alert.route || (alert.alert_type === "upload" ? "/upload-log" : "/live-visitors"),
       timestamp: formatDateTime(alert.created_at),
       detail: alert.message,
+    })),
+    topRoutes: routes.items.map((route) => ({
+      route: route.route,
+      totalHits: route.request_count,
+      suspiciousHits: route.suspicious_count,
+      tone: route.suspicious_count >= 10 ? "attack" : route.suspicious_count > 0 ? "suspicious" : "info",
     })),
     latestSelfTest: summary.latest_self_test_result
       ? {

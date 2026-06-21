@@ -1,15 +1,7 @@
 import { useEffect, useState } from "react";
-import {
-  dashboardDistribution,
-  dashboardMetrics,
-  detectionTrend,
-  latestSelfTest,
-  recentAlerts,
-  suspiciousRoutes,
-  visitorSummaryMetrics,
-} from "../data/presentationData";
 import { fetchDashboardBackendData, type DashboardBackendData } from "../utils/dashboard";
 import { AlertList } from "./AlertList";
+import { EmptyState } from "./EmptyState";
 import { LineChart } from "./LineChart";
 import { Panel } from "./Panel";
 import { PieChart } from "./PieChart";
@@ -19,7 +11,13 @@ import { SummaryCard } from "./SummaryCard";
 
 export function DashboardPage() {
   const [backendData, setBackendData] = useState<DashboardBackendData | null>(null);
-  const [statusMessage, setStatusMessage] = useState("Loading backend summary...");
+  const [status, setStatus] = useState<{
+    type: "loading" | "success" | "error";
+    message: string;
+  }>({
+    type: "loading",
+    message: "Loading backend summary...",
+  });
 
   useEffect(() => {
     let active = true;
@@ -30,13 +28,22 @@ export function DashboardPage() {
           return;
         }
         setBackendData(data);
-        setStatusMessage("Backend summary refreshed successfully.");
+        setStatus({
+          type: "success",
+          message: data.metrics.some((metric) => metric.value !== "0" && metric.value !== "0.00%")
+            ? "Backend summary refreshed successfully."
+            : "No backend activity recorded yet.",
+        });
       })
       .catch(() => {
         if (!active) {
           return;
         }
-        setStatusMessage("Dashboard summary is temporarily unavailable. Existing results remain visible.");
+        setBackendData(null);
+        setStatus({
+          type: "error",
+          message: "Dashboard summary is temporarily unavailable.",
+        });
       });
 
     return () => {
@@ -44,12 +51,13 @@ export function DashboardPage() {
     };
   }, []);
 
-  const metrics = backendData?.metrics ?? dashboardMetrics;
-  const visitorMetrics = backendData?.visitorMetrics ?? visitorSummaryMetrics;
-  const distribution = backendData?.distribution ?? dashboardDistribution;
-  const trend = backendData?.detectionTrend.length ? backendData.detectionTrend : detectionTrend;
-  const alerts = backendData?.alerts.length ? backendData.alerts : recentAlerts.slice(0, 4);
-  const selfTest = backendData?.latestSelfTest ?? latestSelfTest;
+  const metrics = backendData?.metrics ?? [];
+  const visitorMetrics = backendData?.visitorMetrics ?? [];
+  const distribution = backendData?.distribution ?? [];
+  const trend = backendData?.detectionTrend ?? [];
+  const alerts = backendData?.alerts ?? [];
+  const selfTest = backendData?.latestSelfTest ?? null;
+  const topRoutes = backendData?.topRoutes ?? [];
   const flaggedCount = distribution
     .filter((segment) => segment.label !== "Normal")
     .reduce((total, segment) => total + segment.value, 0);
@@ -62,86 +70,135 @@ export function DashboardPage() {
           <h3>
             Unified view of uploaded analysis, visitor activity, alerts, and AI prediction results.
           </h3>
-          <p className="hero-note-copy">{statusMessage}</p>
+          <p className={`hero-note-copy inline-message-${status.type}`}>{status.message}</p>
         </div>
       </div>
 
       <div className="summary-grid">
-        {metrics.map((metric) => (
-          <SummaryCard key={metric.label} {...metric} />
-        ))}
+        {metrics.length > 0 ? (
+          metrics.map((metric) => (
+            <SummaryCard key={metric.label} {...metric} />
+          ))
+        ) : (
+          <EmptyState
+            title="No backend activity recorded yet"
+            description="Dashboard metrics will appear after uploads, predictions, or visitor events are recorded."
+          />
+        )}
       </div>
 
       <div className="analytics-grid">
         <Panel title="Normal vs flagged" subtitle="Uploaded result distribution for the latest analysis batch.">
-          <PieChart
-            centerLabel="Flagged"
-            centerValue={flaggedCount.toLocaleString()}
-            segments={distribution}
-          />
+          {distribution.some((segment) => segment.value > 0) ? (
+            <PieChart
+              centerLabel="Flagged"
+              centerValue={flaggedCount.toLocaleString()}
+              segments={distribution}
+            />
+          ) : (
+            <EmptyState
+              title="No backend activity recorded yet"
+              description="Upload analysis distribution appears after the backend processes a dataset."
+            />
+          )}
         </Panel>
 
         <Panel title="Recent detections" subtitle="Detection counts over the latest monitoring window.">
-          <LineChart
-            series={[
-              {
-                key: "normal",
-                label: "Normal",
-                color: "#34d399",
-                values: trend.map((item) => ({
-                  label: item.label,
-                  value: item.normal,
-                })),
-              },
-              {
-                key: "suspicious",
-                label: "Suspicious",
-                color: "#fbbf24",
-                values: trend.map((item) => ({
-                  label: item.label,
-                  value: item.suspicious,
-                })),
-              },
-              {
-                key: "attack",
-                label: "Attack",
-                color: "#f97316",
-                values: trend.map((item) => ({
-                  label: item.label,
-                  value: item.attack,
-                })),
-              },
-            ]}
-          />
+          {trend.length > 0 ? (
+            <LineChart
+              series={[
+                {
+                  key: "normal",
+                  label: "Normal",
+                  color: "#34d399",
+                  values: trend.map((item) => ({
+                    label: item.label,
+                    value: item.normal,
+                  })),
+                },
+                {
+                  key: "suspicious",
+                  label: "Suspicious",
+                  color: "#fbbf24",
+                  values: trend.map((item) => ({
+                    label: item.label,
+                    value: item.suspicious,
+                  })),
+                },
+                {
+                  key: "attack",
+                  label: "Attack",
+                  color: "#f97316",
+                  values: trend.map((item) => ({
+                    label: item.label,
+                    value: item.attack,
+                  })),
+                },
+              ]}
+            />
+          ) : (
+            <EmptyState
+              title="No backend activity recorded yet"
+              description="Recent detection trends appear after upload analyses are processed."
+            />
+          )}
         </Panel>
       </div>
 
       <div className="dashboard-lower-grid">
         <Panel title="Recent alerts" subtitle="Latest alerts worth showing on the landing view.">
-          <AlertList alerts={alerts} />
+          {alerts.length > 0 ? (
+            <AlertList alerts={alerts} />
+          ) : (
+            <EmptyState
+              title="No backend activity recorded yet"
+              description="Alerts will appear after uploads or visitor activity trigger backend rules."
+            />
+          )}
         </Panel>
 
         <div className="dashboard-side-stack">
           <Panel title="Visitor summary" subtitle="Current website activity snapshot, not full packet capture.">
             <div className="summary-grid compact-grid">
-              {visitorMetrics.map((metric) => (
-                <SummaryCard key={metric.label} {...metric} />
-              ))}
+              {visitorMetrics.length > 0 ? (
+                visitorMetrics.map((metric) => (
+                  <SummaryCard key={metric.label} {...metric} />
+                ))
+              ) : (
+                <EmptyState
+                  title="No backend activity recorded yet"
+                  description="Visitor metrics appear after backend request or page-view activity is recorded."
+                />
+              )}
             </div>
           </Panel>
 
           <Panel title="Suspicious routes" subtitle="Top routes drawing suspicious traffic or repeated probing.">
-            <RouteList routes={suspiciousRoutes} />
+            {topRoutes.length > 0 ? (
+              <RouteList routes={topRoutes} />
+            ) : (
+              <EmptyState
+                title="No backend activity recorded yet"
+                description="Route activity appears after FastAPI receives requests."
+              />
+            )}
           </Panel>
 
           <Panel title="Latest self-test" subtitle="Most recent manual prediction run from the self-test page.">
-            <PredictionResultCard
-              confidence={selfTest.confidence}
-              interpretation={selfTest.interpretation}
-              label={selfTest.label}
-              score={selfTest.score}
-              testedAt={selfTest.testedAt}
-            />
+            {selfTest ? (
+              <PredictionResultCard
+                confidence={selfTest.confidence}
+                interpretation={selfTest.interpretation}
+                label={selfTest.label}
+                score={selfTest.score}
+                testedAt={selfTest.testedAt}
+              />
+            ) : (
+              <EmptyState
+                title="No backend prediction recorded yet"
+                description="Run a self-test prediction to populate this section."
+              />
+            )}
           </Panel>
         </div>
       </div>

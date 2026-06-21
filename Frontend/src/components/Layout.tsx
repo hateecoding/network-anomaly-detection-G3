@@ -6,6 +6,7 @@ export type PageId =
   | "dashboard"
   | "upload"
   | "visitors"
+  | "model-insights"
   | "self-test";
 
 type NavItem = {
@@ -18,6 +19,7 @@ const navItems: NavItem[] = [
   { id: "dashboard", label: "Dashboard", caption: "System summary" },
   { id: "upload", label: "Upload Logs", caption: "Batch analysis" },
   { id: "visitors", label: "Live Visitors", caption: "Website activity" },
+  { id: "model-insights", label: "Model Insights", caption: "Model metrics" },
   { id: "self-test", label: "Self-Test", caption: "Manual prediction" },
 ];
 
@@ -33,6 +35,10 @@ const pageHeadings: Record<PageId, { title: string; subtitle: string }> = {
   visitors: {
     title: "Live Visitors",
     subtitle: "Track website visitors, suspicious request bursts, route pressure, and recent activity.",
+  },
+  "model-insights": {
+    title: "Model Insights",
+    subtitle: "Review deployed model metadata, recommended model selection, and backend performance metrics.",
   },
   "self-test": {
     title: "Self-Test",

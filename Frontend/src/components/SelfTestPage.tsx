@@ -1,6 +1,6 @@
 import { useState, useTransition } from "react";
-import { latestSelfTest } from "../data/presentationData";
 import { predictNetworkSample, type PredictionInput } from "../utils/predict";
+import { EmptyState } from "./EmptyState";
 import { Panel } from "./Panel";
 import { PredictionResultCard } from "./PredictionResultCard";
 
@@ -25,13 +25,7 @@ export function SelfTestPage() {
     label: "Normal" | "Attack";
     score: number;
     testedAt: string;
-  }>({
-    confidence: latestSelfTest.confidence,
-    interpretation: latestSelfTest.interpretation,
-    label: latestSelfTest.label === "Attack" ? "Attack" : "Normal",
-    score: latestSelfTest.score,
-    testedAt: latestSelfTest.testedAt,
-  });
+  } | null>(null);
   const [status, setStatus] = useState<{
     type: "idle" | "loading" | "success" | "error";
     message: string;
@@ -90,16 +84,10 @@ export function SelfTestPage() {
 
   const handleReset = () => {
     setInput(initialInput);
-    setResult({
-      confidence: latestSelfTest.confidence,
-      interpretation: latestSelfTest.interpretation,
-      label: latestSelfTest.label === "Attack" ? "Attack" : "Normal",
-      score: latestSelfTest.score,
-      testedAt: formatNow(new Date()),
-    });
+    setResult(null);
     setStatus({
       type: "idle",
-      message: "Form reset to the default analysis input.",
+      message: "Form reset. No prediction result is currently displayed.",
     });
   };
 
@@ -188,15 +176,22 @@ export function SelfTestPage() {
           title="Prediction output"
           subtitle="AI classification result and derived attack probability."
         >
-          <PredictionResultCard
-            confidence={result.confidence}
-            interpretation={result.interpretation}
-            label={result.label}
-            score={result.score}
-            scoreLabel="Attack probability"
-            scoreSuffix="%"
-            testedAt={result.testedAt}
-          />
+          {result ? (
+            <PredictionResultCard
+              confidence={result.confidence}
+              interpretation={result.interpretation}
+              label={result.label}
+              score={result.score}
+              scoreLabel="Attack probability"
+              scoreSuffix="%"
+              testedAt={result.testedAt}
+            />
+          ) : (
+            <EmptyState
+              title="No prediction result yet"
+              description="Submit the form to run a real backend prediction."
+            />
+          )}
         </Panel>
       </div>
     </div>
