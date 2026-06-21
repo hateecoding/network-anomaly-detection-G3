@@ -1,4 +1,4 @@
-const DEFAULT_API_BASE_URL = "https://fgggqpm3n3.ap-southeast-2.awsapprunner.com";
+const DEFAULT_API_BASE_URL = "https://guaepynme4.ap-southeast-2.awsapprunner.com";
 
 function normalizeBaseUrl(value: string) {
   return value.replace(/\/+$/, "");
