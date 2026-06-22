@@ -11,8 +11,12 @@ import pandas as pd
 
 from schemas import (
     AlertRecord,
+    ConfidenceBucket,
+    ConfusionMatrix,
     RecentDetectionPoint,
     UploadAnalysisResponse,
+    UploadModelAnalysis,
+    UploadModelAnalysisItem,
     UploadModelBreakdown,
     UploadRecordResult,
     UploadSummary,
@@ -25,7 +29,9 @@ from services.preprocess import (
 )
 
 ALLOWED_EXTENSIONS = {".csv", ".json"}
-NORMAL_LABELS = {"normal", "benign", "0", "none", "unknown"}
+NORMAL_LABELS = {"normal", "benign", "0", "none", "unknown", "-", "no", "false"}
+ATTACK_LABELS = {"attack", "malicious", "anomaly", "1", "yes", "true"}
+GROUND_TRUTH_NORMAL_LABELS = {"normal", "benign", "0", "no", "false"}
 
 
 def utcnow() -> datetime:
@@ -137,6 +143,195 @@ def _infer_top_attack_type(context_df: pd.DataFrame) -> str | None:
         return None
 
     return Counter(candidates).most_common(1)[0][0]
+
+
+def _normalize_truth_label(value) -> int | None:
+    text = _clean_optional_text(value)
+    if text is None:
+        return None
+
+    normalized = text.strip().lower()
+    if normalized in {"none", "unknown", "-"}:
+        return None
+    if normalized in GROUND_TRUTH_NORMAL_LABELS:
+        return 0
+    if normalized in ATTACK_LABELS:
+        return 1
+
+    numeric_value = pd.to_numeric(pd.Series([text]), errors="coerce").iloc[0]
+    if pd.notna(numeric_value):
+        return 1 if float(numeric_value) > 0 else 0
+
+    return 1
+
+
+def _extract_truth_labels(context_df: pd.DataFrame) -> list[int] | None:
+    candidates: list[int | None] = []
+    for _, row in context_df.iterrows():
+        label = _normalize_truth_label(row.get("label"))
+        if label is None:
+            label = _normalize_truth_label(row.get("attack_name"))
+        candidates.append(label)
+
+    if not candidates or any(value is None for value in candidates):
+        return None
+
+    return [int(value) for value in candidates if value is not None]
+
+
+def _safe_ratio(numerator: int | float, denominator: int | float) -> float | None:
+    if denominator == 0:
+        return None
+    return round(float(numerator) / float(denominator), 4)
+
+
+def _calculate_roc_auc(truth: list[int], scores: list[float]) -> float | None:
+    positives = sum(1 for value in truth if value == 1)
+    negatives = len(truth) - positives
+    if positives == 0 or negatives == 0:
+        return None
+
+    indexed_scores = sorted(enumerate(scores), key=lambda item: item[1])
+    ranks = [0.0] * len(scores)
+    index = 0
+    while index < len(indexed_scores):
+        tie_end = index
+        while (
+            tie_end + 1 < len(indexed_scores)
+            and indexed_scores[tie_end + 1][1] == indexed_scores[index][1]
+        ):
+            tie_end += 1
+        average_rank = (index + 1 + tie_end + 1) / 2
+        for rank_index in range(index, tie_end + 1):
+            original_index = indexed_scores[rank_index][0]
+            ranks[original_index] = average_rank
+        index = tie_end + 1
+
+    positive_rank_sum = sum(rank for rank, label in zip(ranks, truth) if label == 1)
+    auc = (positive_rank_sum - positives * (positives + 1) / 2) / (positives * negatives)
+    return round(float(auc), 4)
+
+
+def _confidence_buckets(results) -> list[ConfidenceBucket]:
+    bucket_defs = [
+        ("0-20%", 0.0, 0.2),
+        ("21-40%", 0.2000001, 0.4),
+        ("41-60%", 0.4000001, 0.6),
+        ("61-80%", 0.6000001, 0.8),
+        ("81-100%", 0.8000001, 1.0),
+    ]
+    counts = {label: 0 for label, _, _ in bucket_defs}
+
+    for result in results:
+        confidence = float(result.confidence)
+        for label, lower, upper in bucket_defs:
+            if lower <= confidence <= upper:
+                counts[label] += 1
+                break
+
+    return [ConfidenceBucket(label=label, count=count) for label, count in counts.items()]
+
+
+def _build_model_analysis(
+    *,
+    model_results,
+    context_df: pd.DataFrame,
+    fallback_best_model: str,
+) -> UploadModelAnalysis:
+    truth = _extract_truth_labels(context_df)
+    labels_available = truth is not None
+    models: list[UploadModelAnalysisItem] = []
+
+    for model_name, results in model_results.items():
+        predictions = [1 if result.result == "attack" else 0 for result in results]
+        attack_predictions = sum(predictions)
+        normal_predictions = len(predictions) - attack_predictions
+        confidence_values = [float(result.confidence) for result in results]
+
+        metrics: dict[str, float | None] = {
+            "accuracy": None,
+            "precision": None,
+            "recall": None,
+            "f1": None,
+            "roc_auc": None,
+        }
+        confusion_matrix: ConfusionMatrix | None = None
+
+        if labels_available and truth is not None:
+            tp = sum(1 for actual, predicted in zip(truth, predictions) if actual == 1 and predicted == 1)
+            tn = sum(1 for actual, predicted in zip(truth, predictions) if actual == 0 and predicted == 0)
+            fp = sum(1 for actual, predicted in zip(truth, predictions) if actual == 0 and predicted == 1)
+            fn = sum(1 for actual, predicted in zip(truth, predictions) if actual == 1 and predicted == 0)
+            precision = _safe_ratio(tp, tp + fp)
+            recall = _safe_ratio(tp, tp + fn)
+            f1 = (
+                round((2 * precision * recall) / (precision + recall), 4)
+                if precision is not None and recall is not None and precision + recall > 0
+                else None
+            )
+            metrics = {
+                "accuracy": _safe_ratio(tp + tn, len(truth)),
+                "precision": precision,
+                "recall": recall,
+                "f1": f1,
+                "roc_auc": _calculate_roc_auc(
+                    truth,
+                    [float(result.attack_probability) for result in results],
+                ),
+            }
+            confusion_matrix = ConfusionMatrix(
+                true_negative=tn,
+                false_positive=fp,
+                false_negative=fn,
+                true_positive=tp,
+            )
+
+        models.append(
+            UploadModelAnalysisItem(
+                model_name=model_name,
+                accuracy=metrics["accuracy"],
+                precision=metrics["precision"],
+                recall=metrics["recall"],
+                f1=metrics["f1"],
+                roc_auc=metrics["roc_auc"],
+                normal_predictions=normal_predictions,
+                attack_predictions=attack_predictions,
+                average_confidence=(
+                    round(sum(confidence_values) / len(confidence_values), 4)
+                    if confidence_values
+                    else None
+                ),
+                confidence_buckets=_confidence_buckets(results),
+                confusion_matrix=confusion_matrix,
+            )
+        )
+
+    best_model = fallback_best_model
+    highest_recall_model: str | None = None
+    highest_f1_model: str | None = None
+    if labels_available:
+        ranked_by_f1 = [
+            item for item in models if item.f1 is not None
+        ]
+        ranked_by_recall = [
+            item for item in models if item.recall is not None
+        ]
+        if ranked_by_f1:
+            ranked_by_f1.sort(key=lambda item: (item.f1 or 0, item.recall or 0), reverse=True)
+            best_model = ranked_by_f1[0].model_name
+            highest_f1_model = ranked_by_f1[0].model_name
+        if ranked_by_recall:
+            ranked_by_recall.sort(key=lambda item: (item.recall or 0, item.f1 or 0), reverse=True)
+            highest_recall_model = ranked_by_recall[0].model_name
+
+    return UploadModelAnalysis(
+        labels_available=labels_available,
+        evaluated_records=len(context_df),
+        best_model=best_model,
+        highest_recall_model=highest_recall_model,
+        highest_f1_model=highest_f1_model,
+        models=models,
+    )
 
 
 def analyze_upload_file(filename: str, contents: bytes) -> UploadAnalysisResponse:
@@ -276,6 +471,11 @@ def analyze_upload_file(filename: str, contents: bytes) -> UploadAnalysisRespons
                 model_name: _summarize_model_predictions(results)
                 for model_name, results in model_results.items()
             },
+        ),
+        model_analysis=_build_model_analysis(
+            model_results=model_results,
+            context_df=context_df,
+            fallback_best_model=best_model,
         ),
         alerts=alerts[:50],
         suspicious_rows=suspicious_rows[:100],

@@ -76,9 +76,9 @@ export function Layout({
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
         <div className="sidebar-brand">
           <img className="brand-mark" src="/favicon.svg" alt="" />
-          <div>
+          <div className="sidebar-brand-copy">
             <p className="eyebrow">Anomaly Network</p>
-            <h1>Network Monitor</h1>
+            <h1 className="sidebar-brand-title">Network Monitor</h1>
           </div>
         </div>
 

@@ -142,6 +142,41 @@ class UploadModelBreakdown(BaseModel):
     attack_percentage: float
 
 
+class ConfidenceBucket(BaseModel):
+    label: str
+    count: int
+
+
+class ConfusionMatrix(BaseModel):
+    true_negative: int
+    false_positive: int
+    false_negative: int
+    true_positive: int
+
+
+class UploadModelAnalysisItem(BaseModel):
+    model_name: str
+    accuracy: Optional[float] = None
+    precision: Optional[float] = None
+    recall: Optional[float] = None
+    f1: Optional[float] = None
+    roc_auc: Optional[float] = None
+    normal_predictions: int
+    attack_predictions: int
+    average_confidence: Optional[float] = None
+    confidence_buckets: list[ConfidenceBucket] = Field(default_factory=list)
+    confusion_matrix: Optional[ConfusionMatrix] = None
+
+
+class UploadModelAnalysis(BaseModel):
+    labels_available: bool
+    evaluated_records: int
+    best_model: Optional[str] = None
+    highest_recall_model: Optional[str] = None
+    highest_f1_model: Optional[str] = None
+    models: list[UploadModelAnalysisItem] = Field(default_factory=list)
+
+
 class UploadSummary(BaseModel):
     total_records: int
     suspicious_records: int
@@ -178,6 +213,7 @@ class UploadAnalysisResponse(BaseModel):
     generated_at: datetime
     filename: str
     summary: UploadSummary
+    model_analysis: Optional[UploadModelAnalysis] = None
     alerts: list[AlertRecord] = Field(default_factory=list)
     suspicious_rows: list[UploadRecordResult] = Field(default_factory=list)
     records: list[UploadRecordResult] = Field(default_factory=list)

@@ -86,8 +86,20 @@ button {
 
 .sidebar-brand {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 120px;
+  padding: 6px 0;
+  overflow: hidden;
+}
+
+.sidebar-brand-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  overflow: hidden;
 }
 
 .brand-mark {
@@ -99,7 +111,7 @@ button {
   background: rgba(255, 255, 255, 0.025);
 }
 
-.sidebar-brand h1,
+.sidebar-brand-title,
 .topbar h2,
 .panel h3,
 .hero-note h3,
@@ -107,6 +119,17 @@ button {
 .prediction-card h4,
 .alert-item h4 {
   margin: 0;
+}
+
+.sidebar-brand-title {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text);
+  font-size: clamp(1.65rem, 1.8vw, 2.4rem);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 1.05;
+  word-break: keep-all;
 }
 
 .eyebrow {
@@ -300,7 +323,11 @@ button {
 }
 
 .summary-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   min-width: 0;
+  min-height: 148px;
   padding: 18px;
   border-radius: 18px;
   border: 1px solid var(--line);
@@ -628,6 +655,14 @@ button {
   margin-top: 18px;
 }
 
+.upload-status-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  animation: fadeIn 220ms ease both;
+}
+
 .result-meta-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
@@ -838,6 +873,19 @@ button {
   background: rgba(255, 255, 255, 0.02);
 }
 
+.subtle-state {
+  margin: 16px 0;
+  text-align: left;
+}
+
+.model-analysis-grid {
+  margin-top: 16px;
+}
+
+.model-table-wrap {
+  margin-top: 16px;
+}
+
 .loading-overlay {
   position: absolute;
   inset: 0;
@@ -922,6 +970,18 @@ button {
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

@@ -10,6 +10,7 @@ export type UploadAnalysisResult = {
   summary: UploadAnalysisSummary;
   charts: UploadAnalysisCharts;
   metadata: UploadAnalysisMetadata;
+  modelAnalysis: UploadModelAnalysis;
 };
 
 export type UploadAnalysisSummary = {
@@ -37,6 +38,34 @@ export type UploadAnalysisMetadata = {
   totalRecordsReturned: number;
   previewLimit: number;
   previewCapped: boolean;
+};
+
+export type UploadModelAnalysisItem = {
+  modelName: string;
+  accuracy: number | null;
+  precision: number | null;
+  recall: number | null;
+  f1: number | null;
+  rocAuc: number | null;
+  normalPredictions: number;
+  attackPredictions: number;
+  averageConfidence: number | null;
+  confidenceBuckets: { label: string; value: number; color: string }[];
+  confusionMatrix: { x: string; y: string; value: number }[];
+};
+
+export type UploadModelAnalysis = {
+  labelsAvailable: boolean;
+  evaluatedRecords: number;
+  bestModel: string | null;
+  highestRecallModel: string | null;
+  highestF1Model: string | null;
+  models: UploadModelAnalysisItem[];
+  charts: {
+    performance: { label: string; value: number; color: string; suffix: string }[];
+    predictionDistribution: { label: string; value: number; color: string }[];
+    confidenceBuckets: { label: string; value: number; color: string }[];
+  };
 };
 
 type BackendUploadAlert = {
@@ -78,6 +107,31 @@ type BackendUploadResponse = {
     attack_percentage: number;
     top_attack_type?: string | null;
   };
+  model_analysis?: {
+    labels_available: boolean;
+    evaluated_records: number;
+    best_model?: string | null;
+    highest_recall_model?: string | null;
+    highest_f1_model?: string | null;
+    models: {
+      model_name: string;
+      accuracy?: number | null;
+      precision?: number | null;
+      recall?: number | null;
+      f1?: number | null;
+      roc_auc?: number | null;
+      normal_predictions: number;
+      attack_predictions: number;
+      average_confidence?: number | null;
+      confidence_buckets?: { label: string; count: number }[];
+      confusion_matrix?: {
+        true_negative: number;
+        false_positive: number;
+        false_negative: number;
+        true_positive: number;
+      } | null;
+    }[];
+  } | null;
   alerts: BackendUploadAlert[];
   suspicious_rows?: BackendUploadRecord[];
   records: BackendUploadRecord[];
@@ -180,6 +234,49 @@ function mapUploadAnalysis(response: BackendUploadResponse): UploadAnalysisResul
       totalRecordsReturned: allRows.length,
       previewLimit: MAX_PREVIEW_ROWS,
       previewCapped: allRows.length > MAX_PREVIEW_ROWS,
+    },
+    modelAnalysis: mapModelAnalysis(response.model_analysis),
+  };
+}
+
+function mapModelAnalysis(response?: BackendUploadResponse["model_analysis"]): UploadModelAnalysis {
+  const models =
+    response?.models.map((model) => ({
+      modelName: model.model_name,
+      accuracy: normalizeMetric(model.accuracy),
+      precision: normalizeMetric(model.precision),
+      recall: normalizeMetric(model.recall),
+      f1: normalizeMetric(model.f1),
+      rocAuc: normalizeMetric(model.roc_auc),
+      normalPredictions: model.normal_predictions,
+      attackPredictions: model.attack_predictions,
+      averageConfidence: normalizeMetric(model.average_confidence),
+      confidenceBuckets: (model.confidence_buckets ?? []).map((bucket) => ({
+        label: `${formatModelName(model.model_name)} ${bucket.label}`,
+        value: bucket.count,
+        color: "#60a5fa",
+      })),
+      confusionMatrix: model.confusion_matrix
+        ? [
+            { x: "Pred Normal", y: "Actual Normal", value: model.confusion_matrix.true_negative },
+            { x: "Pred Attack", y: "Actual Normal", value: model.confusion_matrix.false_positive },
+            { x: "Pred Normal", y: "Actual Attack", value: model.confusion_matrix.false_negative },
+            { x: "Pred Attack", y: "Actual Attack", value: model.confusion_matrix.true_positive },
+          ]
+        : [],
+    })) ?? [];
+
+  return {
+    labelsAvailable: response?.labels_available ?? false,
+    evaluatedRecords: response?.evaluated_records ?? 0,
+    bestModel: response?.best_model ?? null,
+    highestRecallModel: response?.highest_recall_model ?? null,
+    highestF1Model: response?.highest_f1_model ?? null,
+    models,
+    charts: {
+      performance: buildModelPerformanceChart(models, response?.labels_available ?? false),
+      predictionDistribution: buildModelPredictionDistribution(models),
+      confidenceBuckets: models.flatMap((model) => model.confidenceBuckets),
     },
   };
 }
@@ -297,6 +394,54 @@ function buildUploadCharts(
   };
 }
 
+function buildModelPerformanceChart(models: UploadModelAnalysisItem[], labelsAvailable: boolean) {
+  if (!labelsAvailable) {
+    return [];
+  }
+
+  const metricColors: Record<string, string> = {
+    Accuracy: "#60a5fa",
+    Precision: "#5eead4",
+    Recall: "#fbbf24",
+    F1: "#f97316",
+  };
+
+  return models.flatMap((model) =>
+    [
+      ["Accuracy", model.accuracy],
+      ["Precision", model.precision],
+      ["Recall", model.recall],
+      ["F1", model.f1],
+    ].flatMap(([metric, value]) =>
+      typeof value === "number"
+        ? [
+            {
+              label: `${formatModelName(model.modelName)} ${metric}`,
+              value: Math.round(value * 10000) / 100,
+              color: metricColors[String(metric)],
+              suffix: "%",
+            },
+          ]
+        : [],
+    ),
+  );
+}
+
+function buildModelPredictionDistribution(models: UploadModelAnalysisItem[]) {
+  return models.flatMap((model) => [
+    {
+      label: `${formatModelName(model.modelName)} Normal`,
+      value: model.normalPredictions,
+      color: "#34d399",
+    },
+    {
+      label: `${formatModelName(model.modelName)} Attack`,
+      value: model.attackPredictions,
+      color: "#f97316",
+    },
+  ]);
+}
+
 function buildTrend(rows: UploadAnalysisRow[]): DetectionTrendPoint[] {
   if (rows.length === 0) {
     return [];
@@ -392,6 +537,29 @@ function normalizeProtocol(value: string) {
   }
 
   return "OTHER";
+}
+
+export function formatModelName(value: string | null | undefined) {
+  if (!value) {
+    return "Not available";
+  }
+
+  return value
+    .split(/[_-]+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+export function formatModelMetric(value: number | null | undefined) {
+  if (typeof value !== "number") {
+    return "N/A";
+  }
+
+  return `${Math.round(value * 10000) / 100}%`;
+}
+
+function normalizeMetric(value?: number | null) {
+  return typeof value === "number" ? value : null;
 }
 
 function calculateRiskScore(attackPercentage: number, suspiciousRecords: number, totalRecords: number) {

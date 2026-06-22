@@ -1,8 +1,16 @@
 import { useDeferredValue, useEffect, useState } from "react";
 import { AlertRecord, emptyUploadStateMessage, UploadAnalysisRow } from "../data/presentationData";
-import { analyzeUploadedFile, exportUploadRows, UploadAnalysisResult } from "../utils/uploadAnalysis";
+import {
+  analyzeUploadedFile,
+  exportUploadRows,
+  formatModelMetric,
+  formatModelName,
+  UploadAnalysisResult,
+  UploadModelAnalysisItem,
+} from "../utils/uploadAnalysis";
 import { AlertList } from "./AlertList";
 import { D3BarChart } from "./D3BarChart";
+import { D3HeatmapChart } from "./D3HeatmapChart";
 import { D3HistogramChart } from "./D3HistogramChart";
 import { D3LineChart } from "./D3LineChart";
 import { D3PieChart } from "./D3PieChart";
@@ -76,6 +84,47 @@ const columns: DataColumn<UploadAnalysisRow>[] = [
   },
 ];
 
+const modelColumns: DataColumn<UploadModelAnalysisItem>[] = [
+  {
+    key: "model",
+    header: "Model",
+    render: (row) => <strong>{formatModelName(row.modelName)}</strong>,
+  },
+  {
+    key: "accuracy",
+    header: "Accuracy",
+    align: "right",
+    render: (row) => formatModelMetric(row.accuracy),
+  },
+  {
+    key: "precision",
+    header: "Precision",
+    align: "right",
+    render: (row) => formatModelMetric(row.precision),
+  },
+  {
+    key: "recall",
+    header: "Recall",
+    align: "right",
+    render: (row) => formatModelMetric(row.recall),
+  },
+  {
+    key: "f1",
+    header: "F1-score",
+    align: "right",
+    render: (row) => formatModelMetric(row.f1),
+  },
+  {
+    key: "predictions",
+    header: "Predictions",
+    render: (row) => (
+      <span>
+        {row.normalPredictions.toLocaleString()} normal / {row.attackPredictions.toLocaleString()} attack
+      </span>
+    ),
+  },
+];
+
 export function UploadLogsPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState<UploadAnalysisResult | null>(null);
@@ -96,6 +145,18 @@ export function UploadLogsPage() {
   const statusTone = state.type === "idle" ? "info" : state.type;
   const deferredQuery = useDeferredValue(query);
   const hasAnalysis = state.type === "success" && analysis !== null;
+  const selectedModelAnalysis =
+    analysis?.modelAnalysis.models.find((model) => model.modelName === analysis.modelAnalysis.bestModel) ??
+    analysis?.modelAnalysis.models[0] ??
+    null;
+  const uploadStatus =
+    state.type === "loading"
+      ? { label: "PROCESSING", tone: "info" as const }
+      : state.type === "success"
+        ? { label: "SUCCESS", tone: "normal" as const }
+        : state.type === "error"
+          ? { label: "FAILED", tone: "attack" as const }
+          : null;
 
   const filteredRows = sortRows(
     rows.filter((row) => {
@@ -176,7 +237,10 @@ export function UploadLogsPage() {
           <button type="button" className="primary-button" onClick={handleAnalyze} disabled={state.type === "loading"}>
             Analyze file
           </button>
-          <span className={`inline-message inline-message-${statusTone}`}>{state.message}</span>
+          <div className="upload-status-line">
+            {uploadStatus ? <StatusBadge label={uploadStatus.label} tone={uploadStatus.tone} /> : null}
+            <span className={`inline-message inline-message-${statusTone}`}>{state.message}</span>
+          </div>
         </div>
       </Panel>
 
@@ -191,33 +255,21 @@ export function UploadLogsPage() {
         <>
       <div className="summary-grid upload-summary-grid">
         <SummaryCard
-          label="Total analyzed rows"
+          label="Analyzed rows"
           value={formatCount(analysis?.summary.totalRecords ?? 0)}
           helper="Rows processed by the backend"
           tone="info"
         />
         <SummaryCard
-          label="Normal rows"
-          value={formatCount(analysis?.summary.normalRecords ?? 0)}
-          helper="Rows classified as normal traffic"
-          tone="normal"
-        />
-        <SummaryCard
-          label="Suspicious rows"
-          value={formatCount(analysis?.summary.suspiciousRecords ?? 0)}
-          helper="Rows requiring analyst review"
-          tone="suspicious"
+          label="Attack %"
+          value={`${formatDecimal(analysis?.summary.attackPercentage ?? 0)}%`}
+          helper="Attack ratio in the uploaded dataset"
+          tone="attack"
         />
         <SummaryCard
           label="Attack rows"
           value={formatCount(analysis?.summary.attackRecords ?? 0)}
           helper="Rows classified as threat traffic"
-          tone="attack"
-        />
-        <SummaryCard
-          label="Attack percentage"
-          value={`${formatDecimal(analysis?.summary.attackPercentage ?? 0)}%`}
-          helper="Attack ratio in the uploaded dataset"
           tone="attack"
         />
         <SummaryCard
@@ -227,16 +279,28 @@ export function UploadLogsPage() {
           tone={getRiskTone(analysis?.summary.riskScore ?? 0)}
         />
         <SummaryCard
-          label="Top attack type"
-          value={analysis?.summary.topAttackType ?? "Not reported"}
-          helper="Reported when attack labels are available"
+          label="Suspicious"
+          value={formatCount(analysis?.summary.suspiciousRecords ?? 0)}
+          helper="Rows requiring analyst review"
           tone="suspicious"
         />
         <SummaryCard
-          label="Processing status"
-          value={state.type === "success" ? "SUCCESS" : state.type === "error" ? "FAILED" : "WAITING"}
-          helper={analysis ? "Backend processed" : "Awaiting upload"}
-          tone={state.type === "success" ? "normal" : state.type === "error" ? "attack" : "info"}
+          label="Normal"
+          value={formatCount(analysis?.summary.normalRecords ?? 0)}
+          helper="Rows classified as normal traffic"
+          tone="normal"
+        />
+        <SummaryCard
+          label="Model used"
+          value={formatModelName(analysis?.modelAnalysis.bestModel)}
+          helper="Selected for this dataset"
+          tone="info"
+        />
+        <SummaryCard
+          label="Avg confidence"
+          value={formatModelMetric(selectedModelAnalysis?.averageConfidence)}
+          helper="Selected model confidence"
+          tone="normal"
         />
       </div>
 
@@ -310,6 +374,94 @@ export function UploadLogsPage() {
         ) : (
           <EmptyState title="No confidence data" description="Confidence distribution appears after a successful backend analysis." />
         )}
+      </Panel>
+
+      <Panel title="Dataset Model Analysis" subtitle="Model behavior on this upload.">
+        <div className="summary-grid upload-summary-grid">
+          <SummaryCard
+            label="Best model"
+            value={formatModelName(analysis.modelAnalysis.bestModel)}
+            helper={analysis.modelAnalysis.labelsAvailable ? "Highest dataset F1-score" : "Configured backend selection"}
+            tone="normal"
+          />
+          <SummaryCard
+            label="Highest recall"
+            value={formatModelName(analysis.modelAnalysis.highestRecallModel)}
+            helper="Available when labels exist"
+            tone="suspicious"
+          />
+          <SummaryCard
+            label="Highest F1-score"
+            value={formatModelName(analysis.modelAnalysis.highestF1Model)}
+            helper="Available when labels exist"
+            tone="info"
+          />
+          <SummaryCard
+            label="Evaluated records"
+            value={analysis.modelAnalysis.evaluatedRecords.toLocaleString()}
+            helper="Rows compared across models"
+            tone="info"
+          />
+          <SummaryCard
+            label="Labels"
+            value={analysis.modelAnalysis.labelsAvailable ? "Available" : "Not Available"}
+            helper="Ground-truth evaluation"
+            tone={analysis.modelAnalysis.labelsAvailable ? "normal" : "suspicious"}
+          />
+        </div>
+
+        {!analysis.modelAnalysis.labelsAvailable ? (
+          <div className="empty-state subtle-state">
+            <h4>Accuracy metrics unavailable</h4>
+            <p>
+              Ground-truth labels were not found in this dataset, so accuracy-based evaluation is unavailable. The system is showing prediction distribution and confidence analysis only.
+            </p>
+          </div>
+        ) : null}
+
+        <div className="analytics-grid model-analysis-grid">
+          {analysis.modelAnalysis.charts.performance.length > 0 ? (
+            <Panel title="Model performance" subtitle="Accuracy, precision, recall, and F1.">
+              <D3BarChart data={analysis.modelAnalysis.charts.performance} height={340} />
+            </Panel>
+          ) : null}
+
+          <Panel title="Prediction distribution" subtitle="Normal vs attack by model.">
+            {analysis.modelAnalysis.charts.predictionDistribution.length > 0 ? (
+              <D3BarChart data={analysis.modelAnalysis.charts.predictionDistribution} height={320} />
+            ) : (
+              <EmptyState title="No model distribution" description="No per-model predictions were returned." />
+            )}
+          </Panel>
+
+          <Panel title="Model confidence" subtitle="Confidence buckets across models.">
+            {analysis.modelAnalysis.charts.confidenceBuckets.length > 0 ? (
+              <D3HistogramChart data={analysis.modelAnalysis.charts.confidenceBuckets} height={320} />
+            ) : (
+              <EmptyState title="No confidence data" description="Model confidence buckets were not returned." />
+            )}
+          </Panel>
+
+          {analysis.modelAnalysis.labelsAvailable && analysis.modelAnalysis.models[0]?.confusionMatrix.length ? (
+            <Panel title="Confusion matrix" subtitle={formatModelName(analysis.modelAnalysis.models[0].modelName)}>
+              <D3HeatmapChart data={analysis.modelAnalysis.models[0].confusionMatrix} />
+            </Panel>
+          ) : null}
+        </div>
+
+        <div className="panel-table-wrap model-table-wrap">
+          <DataTable
+            columns={modelColumns}
+            rows={analysis.modelAnalysis.models}
+            rowKey={(row) => row.modelName}
+            emptyState={
+              <EmptyState
+                title="No model analysis"
+                description="Per-model upload analysis was not returned by the backend."
+              />
+            }
+          />
+        </div>
       </Panel>
 
       <Panel

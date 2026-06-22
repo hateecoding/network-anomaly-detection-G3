@@ -148,7 +148,7 @@ FIELD_ALIASES = {
     },
     "route": {"route", "path", "url", "endpoint", "uri", "request_path"},
     "attack_name": {"attack_name", "attack_cat"},
-    "label": {"label"},
+    "label": {"label", "attack_cat", "class", "target", "is_attack"},
 }
 
 SERVICE_GROUP_MAP = {
@@ -627,6 +627,11 @@ def _canonical_model_input(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataF
         if label_series is not None and not pd.api.types.is_numeric_dtype(label_series):
             attack_name_series = label_series.map(_text_value)
     context_df["attack_name"] = attack_name_series
+    context_df["label"] = _metadata_series(
+        cleaned_df,
+        source_lookup,
+        FIELD_ALIASES["label"],
+    )
 
     return model_input_df[TRAINING_COLUMNS], context_df
 
