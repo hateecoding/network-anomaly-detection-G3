@@ -245,7 +245,7 @@ class VisitorTracker:
                 AlertRecord(
                     alert_type="visitor",
                     created_at=event["timestamp"],
-                    message=str(event["reason"] or "Suspicious visitor activity detected."),
+                    message=str(event["reason"] or "Flagged visitor activity detected."),
                     alert_level="medium",
                     source_ip=event["ip"],
                     route=event["path"],

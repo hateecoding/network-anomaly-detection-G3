@@ -29,6 +29,8 @@ from services.preprocess import (
 )
 
 ALLOWED_EXTENSIONS = {".csv", ".json"}
+MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024
+MAX_UPLOAD_ROWS = 250_000
 NORMAL_LABELS = {"normal", "benign", "0", "none", "unknown", "-", "no", "false"}
 ATTACK_LABELS = {"attack", "malicious", "anomaly", "1", "yes", "true"}
 GROUND_TRUTH_NORMAL_LABELS = {"normal", "benign", "0", "no", "false"}
@@ -123,6 +125,13 @@ def _validate_filename(filename: str) -> None:
     lowered = filename.lower()
     if not any(lowered.endswith(extension) for extension in ALLOWED_EXTENSIONS):
         raise ValueError("Only CSV and JSON uploads are supported right now.")
+
+
+def validate_upload_size(contents: bytes) -> None:
+    if not contents:
+        raise ValueError("Uploaded file is empty.")
+    if len(contents) > MAX_UPLOAD_SIZE_BYTES:
+        raise ValueError("Uploaded file is too large. Please upload a file under 25 MB.")
 
 
 def _infer_top_attack_type(context_df: pd.DataFrame) -> str | None:
@@ -345,6 +354,10 @@ def analyze_upload_file(filename: str, contents: bytes) -> UploadAnalysisRespons
 
     if raw_df.empty:
         raise ValueError("Uploaded file is empty.")
+    if len(raw_df) > MAX_UPLOAD_ROWS:
+        raise ValueError(
+            f"Uploaded dataset is too large. Please upload {MAX_UPLOAD_ROWS:,} rows or fewer."
+        )
 
     try:
         processed_df, context_df = prepare_batch_input(raw_df)
@@ -356,6 +369,10 @@ def analyze_upload_file(filename: str, contents: bytes) -> UploadAnalysisRespons
         headerless_df = _read_upload(filename, contents, header=None)
         if headerless_df.empty:
             raise ValueError("Uploaded file is empty.") from exc
+        if len(headerless_df) > MAX_UPLOAD_ROWS:
+            raise ValueError(
+                f"Uploaded dataset is too large. Please upload {MAX_UPLOAD_ROWS:,} rows or fewer."
+            ) from exc
 
         try:
             structured_df = apply_known_headerless_schema(headerless_df)
@@ -428,7 +445,7 @@ def analyze_upload_file(filename: str, contents: bytes) -> UploadAnalysisRespons
                 AlertRecord(
                     alert_type="upload",
                     created_at=generated_at,
-                    message=f"Upload row {position} flagged as suspicious by {best_model}.",
+                    message=f"Upload row {position} flagged for review by {best_model}.",
                     alert_level=alert_level,
                     source_ip=source_ip,
                     destination_ip=destination_ip,

@@ -1,7 +1,7 @@
 import { StatusBadge } from "./StatusBadge";
 
 type PredictionResultCardProps = {
-  label: "Normal" | "Suspicious" | "Attack";
+  label: "Normal" | "Review Recommended" | "Attack";
   confidence: number;
   score: number;
   interpretation: string;
@@ -20,7 +20,7 @@ export function PredictionResultCard({
   testedAt,
 }: PredictionResultCardProps) {
   const tone =
-    label === "Attack" ? "attack" : label === "Suspicious" ? "suspicious" : "normal";
+    label === "Attack" ? "attack" : label === "Review Recommended" ? "suspicious" : "normal";
 
   return (
     <div className="prediction-card">

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { SuspiciousVisitor } from "../data/presentationData";
+import { VisitorIdentifier } from "../data/presentationData";
 import { fetchLiveTrafficData, type LiveTrafficData } from "../utils/liveVisitors";
 import { D3BarChart } from "./D3BarChart";
 import { DataColumn, DataTable } from "./DataTable";
@@ -14,7 +14,7 @@ type LiveVisitorsPageProps = {
   refreshNonce: number;
 };
 
-const visitorColumns: DataColumn<SuspiciousVisitor>[] = [
+const visitorColumns: DataColumn<VisitorIdentifier>[] = [
   {
     key: "ip",
     header: "Visitor / route",
@@ -114,7 +114,7 @@ export function LiveVisitorsPage({ refreshNonce }: LiveVisitorsPageProps) {
           tone="info"
         />
         <SummaryCard
-          label="Suspicious visitors"
+          label="Flagged visitors"
           value={(traffic?.suspiciousVisitors ?? 0).toLocaleString()}
           helper="Visitors breaching backend monitoring thresholds"
           tone="suspicious"
@@ -189,13 +189,13 @@ export function LiveVisitorsPage({ refreshNonce }: LiveVisitorsPageProps) {
             )}
           </Panel>
 
-          <Panel title="Suspicious requests">
+          <Panel title="Flagged requests">
             {traffic && traffic.suspiciousRequests.length > 0 ? (
               <VisitorTable rows={traffic.suspiciousRequests} />
             ) : (
               <EmptyState
-                title="No suspicious requests"
-                description={hasActivity ? "Recent activity is below thresholds." : "Suspicious requests appear when thresholds are breached."}
+                title="No flagged requests"
+                description={hasActivity ? "Recent activity is below thresholds." : "Flagged requests appear when thresholds are breached."}
               />
             )}
           </Panel>

@@ -89,9 +89,9 @@ export async function fetchDashboardBackendData(): Promise<DashboardBackendData>
         tone: "info",
       },
       {
-        label: "Suspicious Records",
+        label: "Review Recommended",
         value: summary.total_suspicious.toLocaleString(),
-        helper: "Rows flagged for review or escalation",
+        helper: "Rows requiring analyst review",
         tone: "suspicious",
       },
       {
@@ -103,7 +103,7 @@ export async function fetchDashboardBackendData(): Promise<DashboardBackendData>
       {
         label: "Attack Percentage",
         value: `${summary.attack_percentage.toFixed(2)}%`,
-        helper: "Suspicious share across processed records",
+        helper: "Flagged share across processed records",
         tone: "attack",
       },
     ],
@@ -115,7 +115,7 @@ export async function fetchDashboardBackendData(): Promise<DashboardBackendData>
         tone: "info",
       },
       {
-        label: "Suspicious Visitors",
+        label: "Flagged Visitors",
         value: summary.suspicious_visitors.toLocaleString(),
         helper: "Visitors breaching monitoring thresholds",
         tone: "suspicious",
@@ -129,7 +129,7 @@ export async function fetchDashboardBackendData(): Promise<DashboardBackendData>
         color: "#34d399",
       },
       {
-        label: "Suspicious",
+        label: "Review Recommended",
         value: attackRecords,
         tone: "suspicious",
         color: "#fbbf24",

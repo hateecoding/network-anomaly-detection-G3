@@ -39,14 +39,14 @@ export type UploadAnalysisRow = {
   protocol: string;
   service: string;
   duration: number;
-  prediction: "Normal" | "Suspicious" | "Attack";
+  prediction: "Normal" | "Review Recommended" | "Attack";
   confidence: number;
   attackProbability: number;
   alertLevel: "Low" | "Medium" | "High";
   detectionResult: "SAFE" | "THREAT DETECTED";
 };
 
-export type SuspiciousVisitor = {
+export type VisitorIdentifier = {
   id: string;
   ip: string;
   route: string;

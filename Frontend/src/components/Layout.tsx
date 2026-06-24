@@ -30,11 +30,11 @@ const pageHeadings: Record<PageId, { title: string; subtitle: string }> = {
   },
   upload: {
     title: "Upload Logs",
-    subtitle: "Upload CSV logs, review analyzed rows, and focus quickly on suspicious entries.",
+    subtitle: "Upload CSV logs, review analyzed rows, and focus quickly on flagged entries.",
   },
   visitors: {
     title: "Live Visitors",
-    subtitle: "Track website visitors, suspicious request bursts, route pressure, and recent activity.",
+    subtitle: "Track website visitors, flagged request bursts, route pressure, and recent activity.",
   },
   "model-insights": {
     title: "Model Insights",

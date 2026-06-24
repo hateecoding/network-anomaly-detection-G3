@@ -48,10 +48,9 @@ export function UploadBox({ file, disabled, onSelectFile }: UploadBoxProps) {
       />
       <div>
         <p className="eyebrow">Upload CSV</p>
-        <h3>Drag a log file here or select one from your device.</h3>
+        <h3>Drag a network traffic CSV here or select one from your device.</h3>
         <p className="upload-copy">
-          CSV uploads are sent to the backend /upload-log endpoint and rendered in this dashboard
-          once analysis is complete.
+          Use the template if you need the expected column format.
         </p>
       </div>
       <div className="upload-actions">

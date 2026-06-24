@@ -2,6 +2,7 @@ import { useDeferredValue, useEffect, useState } from "react";
 import { AlertRecord, emptyUploadStateMessage, UploadAnalysisRow } from "../data/presentationData";
 import {
   analyzeUploadedFile,
+  exportCsvTemplate,
   exportUploadRows,
   formatModelMetric,
   formatModelName,
@@ -22,7 +23,7 @@ import { StatusBadge } from "./StatusBadge";
 import { SummaryCard } from "./SummaryCard";
 import { UploadBox } from "./UploadBox";
 
-const filterOptions = ["all", "attack", "suspicious", "normal"] as const;
+const filterOptions = ["all", "attack", "review", "normal"] as const;
 const sortOptions = ["priority", "record", "confidence", "attackProbability"] as const;
 const pageSizeOptions = [25, 50, 100] as const;
 
@@ -55,11 +56,17 @@ const columns: DataColumn<UploadAnalysisRow>[] = [
     header: "Prediction",
     render: (row) => (
       <StatusBadge
-        label={row.prediction === "Normal" ? "NORMAL" : row.prediction === "Suspicious" ? "SUSPICIOUS" : "ATTACK"}
+        label={
+          row.prediction === "Normal"
+            ? "NORMAL"
+            : row.prediction === "Review Recommended"
+              ? "REVIEW RECOMMENDED"
+              : "ATTACK"
+        }
         tone={
           row.prediction === "Attack"
             ? "attack"
-            : row.prediction === "Suspicious"
+            : row.prediction === "Review Recommended"
               ? "suspicious"
               : "normal"
         }
@@ -160,8 +167,9 @@ export function UploadLogsPage() {
 
   const filteredRows = sortRows(
     rows.filter((row) => {
-      const matchesFilter =
-        filter === "all" ? true : row.prediction.toLowerCase() === filter;
+      const rowFilterKey =
+        row.prediction === "Review Recommended" ? "review" : row.prediction.toLowerCase();
+      const matchesFilter = filter === "all" ? true : rowFilterKey === filter;
       const haystack = [
         row.rowId,
         row.sourceIp,
@@ -229,13 +237,16 @@ export function UploadLogsPage() {
     <div className="page-grid">
       <Panel
         title="Upload and analyze"
-        subtitle="Upload a CSV dataset to generate AI analysis."
+        subtitle="Upload a network traffic dataset to generate analysis results."
       >
         <UploadBox file={selectedFile} onSelectFile={setSelectedFile} disabled={state.type === "loading"} />
 
         <div className="upload-toolbar">
           <button type="button" className="primary-button" onClick={handleAnalyze} disabled={state.type === "loading"}>
             Analyze file
+          </button>
+          <button type="button" className="secondary-button" onClick={exportCsvTemplate} disabled={state.type === "loading"}>
+            Download CSV template
           </button>
           <div className="upload-status-line">
             {uploadStatus ? <StatusBadge label={uploadStatus.label} tone={uploadStatus.tone} /> : null}
@@ -246,8 +257,7 @@ export function UploadLogsPage() {
 
       {!hasAnalysis ? (
         <EmptyState
-          title="Upload a CSV dataset to generate AI analysis."
-          description="Summary metrics, charts, and row results appear after the backend processes a file."
+          title="Upload a network traffic dataset to generate analysis results."
         />
       ) : null}
 
@@ -273,13 +283,13 @@ export function UploadLogsPage() {
           tone="attack"
         />
         <SummaryCard
-          label="Risk score"
+          label="Review score"
           value={`${analysis?.summary.riskScore ?? 0}/100`}
-          helper="Calculated from attack and suspicious pressure"
+          helper="Calculated from attack and review pressure"
           tone={getRiskTone(analysis?.summary.riskScore ?? 0)}
         />
         <SummaryCard
-          label="Suspicious"
+          label="Review Recommended"
           value={formatCount(analysis?.summary.suspiciousRecords ?? 0)}
           helper="Rows requiring analyst review"
           tone="suspicious"
@@ -331,8 +341,8 @@ export function UploadLogsPage() {
             <D3LineChart
               series={[
                 {
-                  key: "suspicious",
-                  label: "Suspicious",
+                  key: "review",
+                  label: "Review Recommended",
                   color: "#fbbf24",
                   values: analysis.charts.trend.map((point) => ({ label: point.label, value: point.suspicious })),
                 },
@@ -359,20 +369,20 @@ export function UploadLogsPage() {
           )}
         </Panel>
 
-        <Panel title="Top suspicious source IPs" subtitle="Highest-volume flagged sources.">
+        <Panel title="Top review source IPs" subtitle="Highest-volume flagged sources.">
           {analysis && analysis.charts.topSourceIps.length > 0 ? (
             <D3BarChart data={analysis.charts.topSourceIps} />
           ) : (
-            <EmptyState title="No suspicious sources" description="Source IP concentration appears when suspicious or attack rows are present." />
+            <EmptyState title="No review sources" description="Source IP concentration appears when review or attack rows are present." />
           )}
         </Panel>
       </div>
 
-      <Panel title="Confidence distribution" subtitle="Prediction confidence buckets.">
+      <Panel title="Attack probability distribution" subtitle="Probability buckets returned by the backend model.">
         {analysis ? (
           <D3HistogramChart data={analysis.charts.confidenceBuckets} height={240} />
         ) : (
-          <EmptyState title="No confidence data" description="Confidence distribution appears after a successful backend analysis." />
+          <EmptyState title="No probability data" description="Attack probability buckets appear after a successful backend analysis." />
         )}
       </Panel>
 
@@ -516,7 +526,11 @@ export function UploadLogsPage() {
                 className={`chip ${filter === option ? "chip-active" : ""}`}
                 onClick={() => setFilter(option)}
               >
-                {option === "all" ? "Show all" : `Show ${option} only`}
+                {option === "all"
+                  ? "Show all"
+                  : option === "review"
+                    ? "Show review recommended only"
+                    : `Show ${option} only`}
               </button>
             ))}
           </div>
@@ -531,7 +545,9 @@ export function UploadLogsPage() {
             columns={columns}
             rows={paginatedRows}
             rowKey={(row) => row.rowId}
-            rowClassName={(row) => `table-row-${row.prediction.toLowerCase()}`}
+            rowClassName={(row) =>
+              `table-row-${row.prediction === "Review Recommended" ? "suspicious" : row.prediction.toLowerCase()}`
+            }
             emptyState={
               <EmptyState
                 title="No results yet"
@@ -564,7 +580,7 @@ export function UploadLogsPage() {
         </div>
       </Panel>
 
-      <Panel title="Upload alerts" subtitle="Rows above normal risk.">
+        <Panel title="Upload alerts" subtitle="Rows requiring analyst attention.">
         {alerts.length > 0 ? (
           <AlertList alerts={alerts} />
         ) : (
@@ -612,7 +628,7 @@ function getPriority(row: UploadAnalysisRow) {
     return 2;
   }
 
-  if (row.prediction === "Suspicious") {
+  if (row.prediction === "Review Recommended") {
     return 1;
   }
 

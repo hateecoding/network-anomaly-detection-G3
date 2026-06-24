@@ -36,7 +36,7 @@ from services.predict import (
     prediction_history,
     predict_record,
 )
-from services.upload_analysis import analyze_upload_file, upload_history
+from services.upload_analysis import analyze_upload_file, upload_history, validate_upload_size
 from services.visitor_tracker import visitor_tracker
 
 
@@ -53,6 +53,14 @@ def get_allowed_origins() -> list[str]:
 allowed_origins = get_allowed_origins()
 
 app = FastAPI(title="Anomaly Network Backend", version="1.0.0")
+
+
+def debug_endpoints_enabled() -> bool:
+    return os.getenv("ENABLE_DEBUG_ENDPOINTS", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
 
 app.add_middleware(
     CORSMiddleware,
@@ -173,6 +181,9 @@ def health():
 
 @app.get("/debug-cors")
 def debug_cors():
+    if not debug_endpoints_enabled():
+        raise HTTPException(status_code=404, detail="Debug endpoint is disabled.")
+
     try:
         backend_files = sorted(item.name for item in CURRENT_DIR.iterdir())
     except OSError as exc:
@@ -189,6 +200,9 @@ def debug_cors():
 
 @app.get("/debug-models")
 def debug_models():
+    if not debug_endpoints_enabled():
+        raise HTTPException(status_code=404, detail="Debug endpoint is disabled.")
+
     return get_model_artifact_debug_info()
 
 
@@ -219,12 +233,14 @@ async def upload_log(file: UploadFile = File(...)):
     finally:
         await file.close()
 
-    if not contents:
+    try:
+        validate_upload_size(contents)
+    except ValueError as exc:
         return build_error_response(
             status_code=400,
-            code="empty_upload",
-            message="Uploaded file is empty.",
-            details="The uploaded file did not contain any bytes.",
+            code="invalid_upload",
+            message=str(exc),
+            details=str(exc),
             stage="read_upload",
         )
 

@@ -116,7 +116,7 @@ export function DashboardPage() {
                 },
                 {
                   key: "suspicious",
-                  label: "Suspicious",
+                  label: "Review Recommended",
                   color: "#fbbf24",
                   values: trend.map((item) => ({
                     label: item.label,

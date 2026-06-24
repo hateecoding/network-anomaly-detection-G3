@@ -1,4 +1,4 @@
-import type { ActivityFeedItem, RouteStat, SuspiciousVisitor, VisitorRequest } from "../data/presentationData";
+import type { ActivityFeedItem, RouteStat, VisitorIdentifier, VisitorRequest } from "../data/presentationData";
 import { requestJson } from "./api";
 
 type BackendLiveActivityEvent = {
@@ -37,7 +37,7 @@ export type LiveTrafficData = {
   topRoutes: RouteStat[];
   recentRequests: VisitorRequest[];
   suspiciousRequests: VisitorRequest[];
-  visitorIdentifiers: SuspiciousVisitor[];
+  visitorIdentifiers: VisitorIdentifier[];
   activityFeed: ActivityFeedItem[];
 };
 
@@ -97,8 +97,8 @@ function mapActivityToRequest(event: BackendLiveActivityEvent, index: number): V
   };
 }
 
-function buildVisitorIdentifiers(events: BackendLiveActivityEvent[]): SuspiciousVisitor[] {
-  const grouped = events.reduce<Record<string, SuspiciousVisitor & { lastSeenRaw: string }>>((accumulator, event) => {
+function buildVisitorIdentifiers(events: BackendLiveActivityEvent[]): VisitorIdentifier[] {
+  const grouped = events.reduce<Record<string, VisitorIdentifier & { lastSeenRaw: string }>>((accumulator, event) => {
     const id = event.source_ip || "visitor-unknown";
     const current = accumulator[id];
     const previousRequests = current?.requests ?? 0;
@@ -111,7 +111,7 @@ function buildVisitorIdentifiers(events: BackendLiveActivityEvent[]): Suspicious
       lastSeen: formatTime(event.timestamp),
       lastSeenRaw: event.timestamp,
       reason: event.suspicious
-        ? event.reason || "Suspicious backend activity."
+        ? event.reason || "Flagged backend activity."
         : event.method === "VIEW"
           ? "Frontend page view."
           : "Backend request activity.",

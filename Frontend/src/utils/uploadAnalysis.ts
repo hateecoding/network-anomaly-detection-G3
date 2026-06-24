@@ -1,8 +1,23 @@
 import { requestJson } from "./api";
+import { getDisplayCategory, REVIEW_THRESHOLD } from "../config/thresholds";
 import type { AlertRecord, DetectionTrendPoint, UploadAnalysisRow } from "../data/presentationData";
 
 const MAX_PREVIEW_ROWS = 1000;
 const TREND_BUCKET_COUNT = 12;
+const MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024;
+const CSV_TEMPLATE_HEADERS = [
+  "duration",
+  "src_bytes",
+  "dst_bytes",
+  "protocol_type",
+  "service",
+  "flag",
+  "count",
+  "srv_count",
+  "same_srv_rate",
+  "dst_host_count",
+  "dst_host_srv_count",
+];
 
 export type UploadAnalysisResult = {
   rows: UploadAnalysisRow[];
@@ -138,6 +153,7 @@ type BackendUploadResponse = {
 };
 
 export async function analyzeUploadedFile(file: File): Promise<UploadAnalysisResult> {
+  validateUploadFile(file);
   const formData = new FormData();
   formData.append("file", file);
 
@@ -196,12 +212,52 @@ export function exportUploadRows(rows: UploadAnalysisRow[]) {
   URL.revokeObjectURL(url);
 }
 
+export function exportCsvTemplate() {
+  const example = [
+    "12.5",
+    "1200",
+    "450",
+    "tcp",
+    "http",
+    "SF",
+    "8",
+    "4",
+    "0.5",
+    "12",
+    "6",
+  ];
+  const blob = new Blob([[CSV_TEMPLATE_HEADERS.join(","), example.join(",")].join("\n")], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "aegis-net-upload-template.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function validateUploadFile(file: File) {
+  const filename = file.name.toLowerCase();
+  if (!filename.endsWith(".csv")) {
+    throw new Error("Please upload a CSV file.");
+  }
+
+  if (file.size === 0) {
+    throw new Error("The selected CSV file is empty.");
+  }
+
+  if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+    throw new Error("The selected CSV is too large. Please upload a file under 25 MB.");
+  }
+}
+
 function mapUploadAnalysis(response: BackendUploadResponse): UploadAnalysisResult {
   const allRows = response.records.map((record) => mapUploadRow(record));
   const rows = buildPreviewRows(allRows);
   const alerts = response.alerts.map((alert, index) => mapUploadAlert(alert, index));
   const attackRecords = allRows.filter((row) => row.prediction === "Attack").length;
-  const suspiciousRecords = allRows.filter((row) => row.prediction === "Suspicious").length;
+  const suspiciousRecords = allRows.filter((row) => row.prediction === "Review Recommended").length;
   const normalRecords = allRows.filter((row) => row.prediction === "Normal").length;
   const totalRecords = response.summary.total_records || allRows.length;
   const attackPercentage =
@@ -304,16 +360,7 @@ function mapUploadRow(record: BackendUploadRecord): UploadAnalysisRow {
 function mapUploadPrediction(
   record: BackendUploadRecord,
 ): UploadAnalysisRow["prediction"] {
-  if (record.result === "attack") {
-    return "Attack";
-  }
-
-  // Keep the existing three-state table UX by treating mid-range backend probabilities as review-worthy.
-  if (record.attack_probability >= 0.4) {
-    return "Suspicious";
-  }
-
-  return "Normal";
+  return getDisplayCategory(record.result, record.attack_probability);
 }
 
 function mapUploadAlert(alert: BackendUploadAlert, index: number): AlertRecord {
@@ -354,7 +401,7 @@ function mapAlertLevel(
     return level.toLowerCase() === "high" ? "High" : "Medium";
   }
 
-  if (prediction === "Suspicious" || probabilityPercent >= 40) {
+  if (prediction === "Review Recommended" || probabilityPercent >= REVIEW_THRESHOLD * 100) {
     return "Medium";
   }
 
@@ -384,7 +431,7 @@ function buildUploadCharts(
   return {
     composition: [
       { label: "Normal", value: summary.normalRecords, color: "#34d399" },
-      { label: "Suspicious", value: summary.suspiciousRecords, color: "#fbbf24" },
+      { label: "Review Recommended", value: summary.suspiciousRecords, color: "#fbbf24" },
       { label: "Attack", value: summary.attackRecords, color: "#f97316" },
     ],
     trend: buildTrend(rows),
@@ -458,7 +505,7 @@ function buildTrend(rows: UploadAnalysisRow[]): DetectionTrendPoint[] {
     points.push({
       label: `${first}-${last}`,
       normal: bucket.filter((row) => row.prediction === "Normal").length,
-      suspicious: bucket.filter((row) => row.prediction === "Suspicious").length,
+      suspicious: bucket.filter((row) => row.prediction === "Review Recommended").length,
       attack: bucket.filter((row) => row.prediction === "Attack").length,
     });
   }
@@ -563,8 +610,8 @@ function normalizeMetric(value?: number | null) {
 }
 
 function calculateRiskScore(attackPercentage: number, suspiciousRecords: number, totalRecords: number) {
-  const suspiciousPressure = calculatePercentage(suspiciousRecords, totalRecords);
-  return Math.round(clamp(attackPercentage * 1.5 + suspiciousPressure * 0.65, 0, 100));
+  const reviewPressure = calculatePercentage(suspiciousRecords, totalRecords);
+  return Math.round(clamp(attackPercentage * 1.5 + reviewPressure * 0.65, 0, 100));
 }
 
 function calculatePercentage(value: number, total: number) {
@@ -580,7 +627,7 @@ function getPriority(row: UploadAnalysisRow) {
     return 2;
   }
 
-  if (row.prediction === "Suspicious") {
+  if (row.prediction === "Review Recommended") {
     return 1;
   }
 
