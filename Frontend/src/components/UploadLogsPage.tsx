@@ -217,7 +217,9 @@ export function UploadLogsPage() {
       setAlerts(result.alerts);
       setState({
         type: "success",
-        message: `Analysis completed. Backend processed ${result.summary.totalRecords.toLocaleString()} rows.`,
+        message: result.metadata.previewCapped
+          ? `Analysis completed. Showing first ${result.metadata.returnedRecords.toLocaleString()} records for performance.`
+          : `Analysis completed. Backend processed ${result.summary.totalRecords.toLocaleString()} rows.`,
       });
     } catch (error) {
       setAnalysis(null);
@@ -318,8 +320,8 @@ export function UploadLogsPage() {
         <div className="result-meta-grid">
           <MetaItem label="Last processed filename" value={analysis?.summary.filename ?? selectedFile?.name ?? "No file processed"} />
           <MetaItem label="Last updated timestamp" value={analysis ? formatTimestamp(analysis.summary.updatedAt) : "Not available"} />
-          <MetaItem label="Rows retained for table preview" value={analysis ? `${formatCount(rows.length)} of ${formatCount(analysis.metadata.totalRecordsReturned)}` : "0"} />
-          <MetaItem label="Preview handling" value={analysis?.metadata.previewCapped ? `Prioritized top ${analysis.metadata.previewLimit.toLocaleString()} rows` : "Full returned row set available"} />
+          <MetaItem label="Rows retained for table preview" value={analysis ? `${formatCount(analysis.metadata.returnedRecords)} of ${formatCount(analysis.metadata.totalRecords)}` : "0"} />
+          <MetaItem label="Preview handling" value={analysis?.metadata.previewCapped ? `First ${analysis.metadata.previewLimit.toLocaleString()} records returned` : "Full row set returned"} />
         </div>
       </Panel>
 
@@ -484,7 +486,7 @@ export function UploadLogsPage() {
               className="secondary-button"
               onClick={() => exportUploadRows(filteredRows)}
             >
-              Export filtered results
+              Export filtered preview
             </button>
           ) : null
         }

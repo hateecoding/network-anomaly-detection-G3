@@ -2,8 +2,6 @@ import { requestJson } from "./api";
 import { getDisplayCategory, REVIEW_THRESHOLD } from "../config/thresholds";
 import type { AlertRecord, DetectionTrendPoint, UploadAnalysisRow } from "../data/presentationData";
 
-const MAX_PREVIEW_ROWS = 1000;
-const TREND_BUCKET_COUNT = 12;
 const MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024;
 const CSV_TEMPLATE_HEADERS = [
   "duration",
@@ -50,7 +48,8 @@ export type UploadAnalysisCharts = {
 };
 
 export type UploadAnalysisMetadata = {
-  totalRecordsReturned: number;
+  totalRecords: number;
+  returnedRecords: number;
   previewLimit: number;
   previewCapped: boolean;
 };
@@ -112,6 +111,21 @@ type BackendUploadRecord = {
 type BackendUploadResponse = {
   filename: string;
   generated_at: string;
+  total_records: number;
+  returned_records: number;
+  records_truncated: boolean;
+  max_returned_records: number;
+  chart_data: {
+    trend: {
+      label: string;
+      normal: number;
+      suspicious: number;
+      attack: number;
+    }[];
+    protocols: { label: string; count: number }[];
+    top_source_ips: { label: string; count: number }[];
+    confidence_buckets: { label: string; count: number }[];
+  };
   summary: {
     total_records: number;
     suspicious_records: number;
@@ -253,13 +267,15 @@ function validateUploadFile(file: File) {
 }
 
 function mapUploadAnalysis(response: BackendUploadResponse): UploadAnalysisResult {
-  const allRows = response.records.map((record) => mapUploadRow(record));
-  const rows = buildPreviewRows(allRows);
+  const rows = buildPreviewRows(response.records.map((record) => mapUploadRow(record)));
   const alerts = response.alerts.map((alert, index) => mapUploadAlert(alert, index));
-  const attackRecords = allRows.filter((row) => row.prediction === "Attack").length;
-  const suspiciousRecords = allRows.filter((row) => row.prediction === "Review Recommended").length;
-  const normalRecords = allRows.filter((row) => row.prediction === "Normal").length;
-  const totalRecords = response.summary.total_records || allRows.length;
+  const attackRecords = response.chart_data.trend.reduce((total, point) => total + point.attack, 0);
+  const suspiciousRecords = response.chart_data.trend.reduce(
+    (total, point) => total + point.suspicious,
+    0,
+  );
+  const normalRecords = response.chart_data.trend.reduce((total, point) => total + point.normal, 0);
+  const totalRecords = response.total_records || response.summary.total_records;
   const attackPercentage =
     typeof response.summary.attack_percentage === "number"
       ? response.summary.attack_percentage
@@ -280,16 +296,17 @@ function mapUploadAnalysis(response: BackendUploadResponse): UploadAnalysisResul
       filename: response.filename,
       updatedAt: response.generated_at,
     },
-    charts: buildUploadCharts(allRows, {
+    charts: buildUploadCharts(response.chart_data, {
       totalRecords,
       normalRecords,
       suspiciousRecords,
       attackRecords,
     }),
     metadata: {
-      totalRecordsReturned: allRows.length,
-      previewLimit: MAX_PREVIEW_ROWS,
-      previewCapped: allRows.length > MAX_PREVIEW_ROWS,
+      totalRecords,
+      returnedRecords: response.returned_records,
+      previewLimit: response.max_returned_records,
+      previewCapped: response.records_truncated,
     },
     modelAnalysis: mapModelAnalysis(response.model_analysis),
   };
@@ -420,12 +437,11 @@ function formatTimestamp(value: string) {
 
 function buildPreviewRows(rows: UploadAnalysisRow[]) {
   return [...rows]
-    .sort((left, right) => getPriority(right) - getPriority(left) || left.recordNumber - right.recordNumber)
-    .slice(0, MAX_PREVIEW_ROWS);
+    .sort((left, right) => getPriority(right) - getPriority(left) || left.recordNumber - right.recordNumber);
 }
 
 function buildUploadCharts(
-  rows: UploadAnalysisRow[],
+  chartData: BackendUploadResponse["chart_data"],
   summary: Pick<UploadAnalysisSummary, "totalRecords" | "normalRecords" | "suspiciousRecords" | "attackRecords">,
 ): UploadAnalysisCharts {
   return {
@@ -434,10 +450,22 @@ function buildUploadCharts(
       { label: "Review Recommended", value: summary.suspiciousRecords, color: "#fbbf24" },
       { label: "Attack", value: summary.attackRecords, color: "#f97316" },
     ],
-    trend: buildTrend(rows),
-    protocols: buildProtocolDistribution(rows),
-    topSourceIps: buildTopSourceIps(rows),
-    confidenceBuckets: buildConfidenceBuckets(rows),
+    trend: chartData.trend,
+    protocols: chartData.protocols.map((item, index) => ({
+      label: item.label,
+      value: item.count,
+      color: ["#60a5fa", "#5eead4", "#fbbf24", "#94a3b8"][index % 4],
+    })),
+    topSourceIps: chartData.top_source_ips.map((item) => ({
+      label: item.label,
+      value: item.count,
+      color: "#f97316",
+    })),
+    confidenceBuckets: chartData.confidence_buckets.map((item) => ({
+      label: item.label,
+      value: item.count,
+      color: "#60a5fa",
+    })),
   };
 }
 
@@ -487,103 +515,6 @@ function buildModelPredictionDistribution(models: UploadModelAnalysisItem[]) {
       color: "#f97316",
     },
   ]);
-}
-
-function buildTrend(rows: UploadAnalysisRow[]): DetectionTrendPoint[] {
-  if (rows.length === 0) {
-    return [];
-  }
-
-  const bucketSize = Math.max(1, Math.ceil(rows.length / TREND_BUCKET_COUNT));
-  const points: DetectionTrendPoint[] = [];
-
-  for (let start = 0; start < rows.length; start += bucketSize) {
-    const bucket = rows.slice(start, start + bucketSize);
-    const first = start + 1;
-    const last = start + bucket.length;
-
-    points.push({
-      label: `${first}-${last}`,
-      normal: bucket.filter((row) => row.prediction === "Normal").length,
-      suspicious: bucket.filter((row) => row.prediction === "Review Recommended").length,
-      attack: bucket.filter((row) => row.prediction === "Attack").length,
-    });
-  }
-
-  return points;
-}
-
-function buildProtocolDistribution(rows: UploadAnalysisRow[]) {
-  const counts = rows.reduce<Record<string, number>>((accumulator, row) => {
-    const protocol = normalizeProtocol(row.protocol);
-    accumulator[protocol] = (accumulator[protocol] ?? 0) + 1;
-    return accumulator;
-  }, {});
-
-  return ["TCP", "UDP", "ICMP", "OTHER"]
-    .map((label, index) => ({
-      label,
-      value: counts[label] ?? 0,
-      color: ["#60a5fa", "#5eead4", "#fbbf24", "#94a3b8"][index],
-    }))
-    .filter((item) => item.value > 0);
-}
-
-function buildTopSourceIps(rows: UploadAnalysisRow[]) {
-  const counts = rows.reduce<Record<string, number>>((accumulator, row) => {
-    if (row.prediction === "Normal" || row.sourceIp === "Unknown") {
-      return accumulator;
-    }
-
-    accumulator[row.sourceIp] = (accumulator[row.sourceIp] ?? 0) + 1;
-    return accumulator;
-  }, {});
-
-  return Object.entries(counts)
-    .sort((left, right) => right[1] - left[1])
-    .slice(0, 8)
-    .map(([label, value]) => ({ label, value, color: "#f97316" }));
-}
-
-function buildConfidenceBuckets(rows: UploadAnalysisRow[]) {
-  const buckets = [
-    { label: "0-20%", min: 0, max: 20, value: 0 },
-    { label: "21-40%", min: 21, max: 40, value: 0 },
-    { label: "41-60%", min: 41, max: 60, value: 0 },
-    { label: "61-80%", min: 61, max: 80, value: 0 },
-    { label: "81-100%", min: 81, max: 100, value: 0 },
-  ];
-
-  rows.forEach((row) => {
-    const match = buckets.find((bucket) => row.confidence >= bucket.min && row.confidence <= bucket.max);
-    if (match) {
-      match.value += 1;
-    }
-  });
-
-  return buckets.map((bucket) => ({
-    label: bucket.label,
-    value: bucket.value,
-    color: "#60a5fa",
-  }));
-}
-
-function normalizeProtocol(value: string) {
-  const normalized = value.trim().toUpperCase();
-
-  if (normalized.includes("TCP")) {
-    return "TCP";
-  }
-
-  if (normalized.includes("UDP")) {
-    return "UDP";
-  }
-
-  if (normalized.includes("ICMP")) {
-    return "ICMP";
-  }
-
-  return "OTHER";
 }
 
 export function formatModelName(value: string | null | undefined) {

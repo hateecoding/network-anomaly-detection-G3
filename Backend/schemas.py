@@ -209,10 +209,34 @@ class UploadRecordResult(BaseModel):
     model_results: dict[str, ModelPredictionResult] = Field(default_factory=dict)
 
 
+class UploadChartItem(BaseModel):
+    label: str
+    count: int
+
+
+class UploadTrendPoint(BaseModel):
+    label: str
+    normal: int
+    suspicious: int
+    attack: int
+
+
+class UploadChartData(BaseModel):
+    trend: list[UploadTrendPoint] = Field(default_factory=list)
+    protocols: list[UploadChartItem] = Field(default_factory=list)
+    top_source_ips: list[UploadChartItem] = Field(default_factory=list)
+    confidence_buckets: list[ConfidenceBucket] = Field(default_factory=list)
+
+
 class UploadAnalysisResponse(BaseModel):
     generated_at: datetime
     filename: str
     summary: UploadSummary
+    total_records: int
+    returned_records: int
+    records_truncated: bool
+    max_returned_records: int
+    chart_data: UploadChartData
     model_analysis: Optional[UploadModelAnalysis] = None
     alerts: list[AlertRecord] = Field(default_factory=list)
     suspicious_rows: list[UploadRecordResult] = Field(default_factory=list)

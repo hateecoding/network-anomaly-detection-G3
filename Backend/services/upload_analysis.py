@@ -15,11 +15,14 @@ from schemas import (
     ConfusionMatrix,
     RecentDetectionPoint,
     UploadAnalysisResponse,
+    UploadChartData,
+    UploadChartItem,
     UploadModelAnalysis,
     UploadModelAnalysisItem,
     UploadModelBreakdown,
     UploadRecordResult,
     UploadSummary,
+    UploadTrendPoint,
 )
 from services.predict import predict_processed_frame
 from services.preprocess import (
@@ -31,6 +34,10 @@ from services.preprocess import (
 ALLOWED_EXTENSIONS = {".csv", ".json"}
 MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024
 MAX_UPLOAD_ROWS = 250_000
+MAX_RETURNED_RECORDS = 1_000
+TREND_BUCKET_COUNT = 12
+REVIEW_THRESHOLD = 0.4
+ATTACK_THRESHOLD = 0.5
 NORMAL_LABELS = {"normal", "benign", "0", "none", "unknown", "-", "no", "false"}
 ATTACK_LABELS = {"attack", "malicious", "anomaly", "1", "yes", "true"}
 GROUND_TRUTH_NORMAL_LABELS = {"normal", "benign", "0", "no", "false"}
@@ -104,6 +111,37 @@ def _build_alert_level(result: str, attack_probability: float) -> str:
     if attack_probability >= 0.7:
         return "medium"
     return "low"
+
+
+def _display_category(result: str, attack_probability: float) -> str:
+    if result == "attack" or attack_probability >= ATTACK_THRESHOLD:
+        return "attack"
+    if attack_probability >= REVIEW_THRESHOLD:
+        return "suspicious"
+    return "normal"
+
+
+def _confidence_bucket_label(confidence: float) -> str:
+    if confidence <= 0.2:
+        return "0-20%"
+    if confidence <= 0.4:
+        return "21-40%"
+    if confidence <= 0.6:
+        return "41-60%"
+    if confidence <= 0.8:
+        return "61-80%"
+    return "81-100%"
+
+
+def _normalize_protocol(value) -> str:
+    text = (_clean_optional_text(value) or "OTHER").upper()
+    if "TCP" in text:
+        return "TCP"
+    if "UDP" in text:
+        return "UDP"
+    if "ICMP" in text:
+        return "ICMP"
+    return "OTHER"
 
 
 def _summarize_model_predictions(results) -> UploadModelBreakdown:
@@ -398,10 +436,19 @@ def analyze_upload_file(filename: str, contents: bytes) -> UploadAnalysisRespons
     best_model_results = model_results[best_model]
     generated_at = utcnow()
 
+    total_records = len(best_model_results)
     records: list[UploadRecordResult] = []
     suspicious_rows: list[UploadRecordResult] = []
     alerts: list[AlertRecord] = []
     suspicious_count = 0
+    protocol_counts: Counter[str] = Counter()
+    flagged_source_counts: Counter[str] = Counter()
+    confidence_counts: Counter[str] = Counter()
+    trend_bucket_size = max(1, (total_records + TREND_BUCKET_COUNT - 1) // TREND_BUCKET_COUNT)
+    trend_counts = [
+        {"normal": 0, "suspicious": 0, "attack": 0}
+        for _ in range(min(TREND_BUCKET_COUNT, total_records))
+    ]
 
     for position, best_result in enumerate(best_model_results, start=1):
         row_label = context_df.index[position - 1]
@@ -420,6 +467,16 @@ def analyze_upload_file(filename: str, contents: bytes) -> UploadAnalysisRespons
         protocol = _clean_optional_text(context_df.at[row_label, "protocol"])
         service = _clean_optional_text(context_df.at[row_label, "service"])
         duration = float(context_df.at[row_label, "duration"])
+        category = _display_category(
+            best_result.result,
+            float(best_result.attack_probability),
+        )
+        protocol_counts[_normalize_protocol(protocol)] += 1
+        confidence_counts[_confidence_bucket_label(float(best_result.confidence))] += 1
+        bucket_index = min((position - 1) // trend_bucket_size, len(trend_counts) - 1)
+        trend_counts[bucket_index][category] += 1
+        if category != "normal" and source_ip is not None:
+            flagged_source_counts[source_ip] += 1
 
         record = UploadRecordResult(
             row_id=position,
@@ -436,29 +493,31 @@ def analyze_upload_file(filename: str, contents: bytes) -> UploadAnalysisRespons
             alert_level=alert_level,
             model_results=row_model_results,
         )
-        records.append(record)
+        if len(records) < MAX_RETURNED_RECORDS:
+            records.append(record)
 
         if best_result.result == "attack":
             suspicious_count += 1
-            suspicious_rows.append(record)
-            alerts.append(
-                AlertRecord(
-                    alert_type="upload",
-                    created_at=generated_at,
-                    message=f"Upload row {position} flagged for review by {best_model}.",
-                    alert_level=alert_level,
-                    source_ip=source_ip,
-                    destination_ip=destination_ip,
-                    route=route,
-                    row_id=position,
-                    prediction=best_result.prediction,
-                    result=best_result.result,
-                    confidence=best_result.confidence,
-                    attack_probability=best_result.attack_probability,
+            if len(suspicious_rows) < 100:
+                suspicious_rows.append(record)
+            if len(alerts) < 50:
+                alerts.append(
+                    AlertRecord(
+                        alert_type="upload",
+                        created_at=generated_at,
+                        message=f"Upload row {position} flagged for review by {best_model}.",
+                        alert_level=alert_level,
+                        source_ip=source_ip,
+                        destination_ip=destination_ip,
+                        route=route,
+                        row_id=position,
+                        prediction=best_result.prediction,
+                        result=best_result.result,
+                        confidence=best_result.confidence,
+                        attack_probability=best_result.attack_probability,
+                    )
                 )
-            )
 
-    total_records = len(records)
     normal_count = total_records - suspicious_count
     attack_percentage = (
         round((suspicious_count / total_records) * 100, 2) if total_records else 0.0
@@ -489,14 +548,48 @@ def analyze_upload_file(filename: str, contents: bytes) -> UploadAnalysisRespons
                 for model_name, results in model_results.items()
             },
         ),
+        total_records=total_records,
+        returned_records=len(records),
+        records_truncated=total_records > len(records),
+        max_returned_records=MAX_RETURNED_RECORDS,
+        chart_data=UploadChartData(
+            trend=[
+                UploadTrendPoint(
+                    label=(
+                        f"{index * trend_bucket_size + 1}-"
+                        f"{min((index + 1) * trend_bucket_size, total_records)}"
+                    ),
+                    **counts,
+                )
+                for index, counts in enumerate(trend_counts)
+            ],
+            protocols=[
+                UploadChartItem(label=label, count=protocol_counts[label])
+                for label in ("TCP", "UDP", "ICMP", "OTHER")
+                if protocol_counts[label] > 0
+            ],
+            top_source_ips=[
+                UploadChartItem(label=label, count=count)
+                for label, count in flagged_source_counts.most_common(8)
+            ],
+            confidence_buckets=[
+                ConfidenceBucket(label=label, count=confidence_counts[label])
+                for label in ("0-20%", "21-40%", "41-60%", "61-80%", "81-100%")
+            ],
+        ),
         model_analysis=_build_model_analysis(
             model_results=model_results,
             context_df=context_df,
             fallback_best_model=best_model,
         ),
-        alerts=alerts[:50],
-        suspicious_rows=suspicious_rows[:100],
+        alerts=alerts,
+        suspicious_rows=suspicious_rows,
         records=records,
+    )
+    print(
+        f"UPLOAD_LOG_RESPONSE_ROWS total={total_records} returned={len(records)} "
+        f"truncated={total_records > len(records)} max_returned={MAX_RETURNED_RECORDS}",
+        flush=True,
     )
     upload_history.record(response)
     return response
