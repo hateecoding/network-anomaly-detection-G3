@@ -67,7 +67,6 @@ export default function App() {
       {activePage === "upload" ? (
         <UploadLogsPage
           refreshNonce={refreshNonce}
-          onRequestRefresh={handleRefresh}
           onSyncSuccess={handleSyncSuccess}
           onSyncFailure={handleSyncFailure}
         />

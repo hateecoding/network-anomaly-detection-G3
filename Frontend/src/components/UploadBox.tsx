@@ -46,24 +46,44 @@ export function UploadBox({ file, disabled, onSelectFile }: UploadBoxProps) {
           }
         }}
       />
-      <div>
-        <p className="eyebrow">Upload CSV</p>
-        <h3>Drag a network traffic CSV here or select one from your device.</h3>
-        <p className="upload-copy">
-          Use the template if you need the expected column format.
-        </p>
-      </div>
-      <div className="upload-actions">
+      <button
+        type="button"
+        className="upload-drop-prompt"
+        disabled={disabled}
+        onClick={() => inputRef.current?.click()}
+      >
+        <span className="upload-drop-icon" aria-hidden="true">⇧</span>
+        <span>
+          <strong>Drag & drop CSV file here</strong>
+          <small>or click to browse</small>
+        </span>
+      </button>
+      <div className={`upload-selected-file ${file ? "upload-selected-file-ready" : ""}`}>
+        <span className="upload-file-icon" aria-hidden="true">▤</span>
+        <span className="upload-file-copy">
+          <strong>{file ? file.name : "No file selected"}</strong>
+          <small>
+            {file
+              ? `${formatFileSize(file.size)} · CSV ready`
+              : "Choose a network traffic dataset"}
+          </small>
+        </span>
         <button
           type="button"
-          className="primary-button"
+          className="upload-file-button"
           disabled={disabled}
           onClick={() => inputRef.current?.click()}
         >
-          Choose file
+          Browse
         </button>
-        <span>{file ? file.name : "No file selected yet"}</span>
       </div>
     </div>
   );
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

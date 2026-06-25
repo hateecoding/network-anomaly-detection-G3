@@ -54,12 +54,10 @@ const modelColumns: DataColumn<UploadModelAnalysisItem>[] = [
 
 type UploadLogsPageProps = SyncCallbacks & {
   refreshNonce: number;
-  onRequestRefresh: () => void;
 };
 
 export function UploadLogsPage({
   refreshNonce,
-  onRequestRefresh,
   onSyncSuccess,
   onSyncFailure,
 }: UploadLogsPageProps) {
@@ -84,7 +82,6 @@ export function UploadLogsPage({
   const [yFeature, setYFeature] = useState<ScatterFeature>("duration");
   const [pageSize, setPageSize] = useState<(typeof pageSizeOptions)[number]>(25);
   const [page, setPage] = useState(1);
-  const [syncState, setSyncState] = useState<"checking" | "connected" | "error">("checking");
   const [state, setState] = useState<{
     type: "idle" | "loading" | "success" | "error";
     message: string;
@@ -195,16 +192,13 @@ export function UploadLogsPage({
     const syncBackendStatus = async () => {
       if (requestInFlight) return;
       requestInFlight = true;
-      setSyncState("checking");
       try {
         await checkBackendHealth();
         if (active) {
-          setSyncState("connected");
           onSyncSuccess();
         }
       } catch {
         if (active) {
-          setSyncState("error");
           onSyncFailure();
         }
       } finally {
@@ -320,20 +314,12 @@ export function UploadLogsPage({
           <section className="panel upload-command-card">
             <div className="upload-command-main">
               <div className="upload-command-heading">
-                <div>
-                  <p className="eyebrow">Dataset analysis</p>
-                  <h3>Upload network traffic CSV</h3>
-                </div>
-                <div className="upload-connection-badges">
-                  <StatusBadge
-                    label={syncState === "connected" ? "FastAPI connected" : syncState === "checking" ? "Checking backend" : "Backend unavailable"}
-                    tone={syncState === "connected" ? "normal" : syncState === "checking" ? "info" : "attack"}
-                  />
-                  <StatusBadge
-                    label={hasAnalysis ? "Analysis ready" : "Awaiting dataset"}
-                    tone={hasAnalysis ? "normal" : "info"}
-                  />
-                </div>
+                <h3>Upload network traffic CSV</h3>
+                {hasAnalysis ? (
+                  <button type="button" className="upload-clear-button" onClick={handleClearResult} disabled={state.type === "loading"}>
+                    Clear result
+                  </button>
+                ) : null}
               </div>
               <UploadBox file={selectedFile} onSelectFile={setSelectedFile} disabled={state.type === "loading"} />
             </div>
@@ -345,21 +331,9 @@ export function UploadLogsPage({
               <button type="button" className="secondary-button" onClick={exportCsvTemplate} disabled={state.type === "loading"}>
                 Download template
               </button>
-              <button type="button" className="secondary-button" onClick={() => {
-                onRequestRefresh();
-                setSyncState("checking");
-              }}>
-                Refresh backend
-              </button>
-              {hasAnalysis ? (
-                <button type="button" className="secondary-button" onClick={handleClearResult} disabled={state.type === "loading"}>
-                  Clear result
-                </button>
-              ) : null}
             </div>
 
             <div className="upload-validation-panel">
-              <ValidationItem label="CSV file selected" status={selectedFile ? "ready" : "pending"} />
               <ValidationItem label="Required columns" status={state.type === "success" ? "ready" : "pending"} />
               <ValidationItem label="Numeric values" status={state.type === "success" ? "ready" : "pending"} />
               <ValidationItem label="File size" status={selectedFile && selectedFile.size <= 25 * 1024 * 1024 ? "ready" : selectedFile ? "error" : "pending"} />
@@ -457,7 +431,16 @@ export function UploadLogsPage({
               </section>
 
               <section className="upload-chart-workspace">
+                <nav className="upload-analysis-tabs" aria-label="Upload analysis sections">
+                  <button type="button" className="upload-analysis-tab upload-analysis-tab-active" onClick={() => document.getElementById("upload-overview")?.scrollIntoView({ behavior: "smooth", block: "start" })}>Overview</button>
+                  <button type="button" className="upload-analysis-tab" onClick={() => document.getElementById("upload-risk-trend")?.scrollIntoView({ behavior: "smooth", block: "center" })}>Risk Trend</button>
+                  <button type="button" className="upload-analysis-tab" onClick={() => document.getElementById("upload-feature-explorer")?.scrollIntoView({ behavior: "smooth", block: "center" })}>Feature Explorer</button>
+                  <button type="button" className="upload-analysis-tab" onClick={() => document.getElementById("upload-protocol-risk")?.scrollIntoView({ behavior: "smooth", block: "center" })}>Protocol Risk</button>
+                  <button type="button" className="upload-analysis-tab" onClick={() => document.getElementById("upload-probability")?.scrollIntoView({ behavior: "smooth", block: "center" })}>Probability</button>
+                  <button type="button" className="upload-analysis-tab" onClick={() => document.getElementById("upload-explanation")?.scrollIntoView({ behavior: "smooth", block: "start" })}>Explainability</button>
+                </nav>
                 <div className="upload-chart-grid upload-chart-grid-primary">
+                  <div id="upload-overview" className="upload-chart-cell">
                   <Panel title="A. Prediction distribution" subtitle="Normal, review, and attack composition.">
                     <D3PieChart
                       segments={analysis.charts.composition}
@@ -467,6 +450,8 @@ export function UploadLogsPage({
                       onSelect={selectCategory}
                     />
                   </Panel>
+                  </div>
+                  <div id="upload-risk-trend" className="upload-chart-cell">
                   <Panel title="B. Grouped anomaly-risk trend" subtitle="Average and maximum probability with attack concentration.">
                     <D3RiskTrendChart
                       data={analysis.charts.trend}
@@ -476,9 +461,11 @@ export function UploadLogsPage({
                       onSelectRange={selectRiskRange}
                     />
                   </Panel>
+                  </div>
                 </div>
 
                 <div className="upload-chart-grid upload-chart-grid-secondary">
+                  <div id="upload-feature-explorer" className="upload-chart-cell">
                   <Panel title="C. Traffic feature explorer" subtitle="Associations between traffic features and model output.">
                     <div className="chart-axis-controls">
                       <label>X-axis<select value={xFeature} onChange={(event) => setXFeature(event.target.value as ScatterFeature)}>{Object.entries(scatterFeatureLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
@@ -486,11 +473,13 @@ export function UploadLogsPage({
                     </div>
                     <D3ScatterPlot rows={filteredRows} xFeature={xFeature} yFeature={yFeature} selectedRow={selectedRow} onSelectRow={setSelectedRow} />
                   </Panel>
-
+                  </div>
+                  <div id="upload-protocol-risk" className="upload-chart-cell">
                   <Panel title="D. Protocol risk comparison" subtitle="Stacked category counts and proportional attack risk.">
                     <D3ProtocolRiskChart data={analysis.charts.protocolRisk} selectedProtocol={protocolFilter} onSelect={selectProtocol} />
                   </Panel>
-
+                  </div>
+                  <div id="upload-probability" className="upload-chart-cell">
                   <Panel title="E. Attack-probability distribution" subtitle="Prediction frequency across model risk ranges.">
                     <D3ProbabilityHistogram
                       data={analysis.charts.probabilityBuckets}
@@ -500,6 +489,7 @@ export function UploadLogsPage({
                       onSelect={selectProbabilityBucket}
                     />
                   </Panel>
+                  </div>
                 </div>
               </section>
 
@@ -579,7 +569,7 @@ export function UploadLogsPage({
           ) : null}
         </div>
 
-        <aside className="upload-explanation-rail">
+        <aside id="upload-explanation" className="upload-explanation-rail">
           <ExplanationPanel row={selectedRecord} />
         </aside>
       </div>

@@ -31,7 +31,7 @@ const pageHeadings: Record<PageId, { title: string; subtitle: string }> = {
   },
   upload: {
     title: "Upload Logs",
-    subtitle: "Upload CSV logs, review analyzed rows, and focus quickly on flagged entries.",
+    subtitle: "Batch network traffic analysis with AI prediction and explainability.",
   },
   visitors: {
     title: "Live Visitors",
@@ -75,7 +75,7 @@ export function Layout({
   const heading = pageHeadings[activePage];
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell app-shell-${activePage}`}>
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
         <div className="sidebar-brand">
           <img className="brand-mark" src="/favicon.svg" alt="" />
@@ -118,8 +118,8 @@ export function Layout({
         />
       ) : null}
 
-      <main className="main-shell">
-        <header className="topbar">
+      <main className={`main-shell main-shell-${activePage}`}>
+        <header className={`topbar topbar-${activePage}`}>
           <div>
             <p className="eyebrow">Security Operations</p>
             <h2>{heading.title}</h2>
