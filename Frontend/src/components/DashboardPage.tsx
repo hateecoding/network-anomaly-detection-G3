@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchDashboardBackendData, type DashboardBackendData } from "../utils/dashboard";
+import { STANDARD_SYNC_INTERVAL_MS, type SyncCallbacks } from "../utils/sync";
 import { AlertList } from "./AlertList";
 import { D3LineChart } from "./D3LineChart";
 import { D3PieChart } from "./D3PieChart";
@@ -9,7 +10,15 @@ import { PredictionResultCard } from "./PredictionResultCard";
 import { RouteList } from "./RouteList";
 import { SummaryCard } from "./SummaryCard";
 
-export function DashboardPage() {
+type DashboardPageProps = SyncCallbacks & {
+  refreshNonce: number;
+};
+
+export function DashboardPage({
+  refreshNonce,
+  onSyncSuccess,
+  onSyncFailure,
+}: DashboardPageProps) {
   const [backendData, setBackendData] = useState<DashboardBackendData | null>(null);
   const [status, setStatus] = useState<{
     type: "loading" | "success" | "error";
@@ -21,9 +30,16 @@ export function DashboardPage() {
 
   useEffect(() => {
     let active = true;
+    let requestInFlight = false;
 
-    fetchDashboardBackendData()
-      .then((data) => {
+    const loadDashboard = async () => {
+      if (requestInFlight) {
+        return;
+      }
+      requestInFlight = true;
+
+      try {
+        const data = await fetchDashboardBackendData();
         if (!active) {
           return;
         }
@@ -34,22 +50,29 @@ export function DashboardPage() {
             ? "Backend summary refreshed successfully."
             : "No backend activity recorded yet.",
         });
-      })
-      .catch(() => {
+        onSyncSuccess();
+      } catch {
         if (!active) {
           return;
         }
-        setBackendData(null);
         setStatus({
           type: "error",
-          message: "Dashboard summary is temporarily unavailable.",
+          message: "Dashboard sync failed. Existing data remains available.",
         });
-      });
+        onSyncFailure();
+      } finally {
+        requestInFlight = false;
+      }
+    };
+
+    void loadDashboard();
+    const timer = window.setInterval(() => void loadDashboard(), STANDARD_SYNC_INTERVAL_MS);
 
     return () => {
       active = false;
+      window.clearInterval(timer);
     };
-  }, []);
+  }, [refreshNonce, onSyncFailure, onSyncSuccess]);
 
   const metrics = backendData?.metrics ?? [];
   const visitorMetrics = backendData?.visitorMetrics ?? [];

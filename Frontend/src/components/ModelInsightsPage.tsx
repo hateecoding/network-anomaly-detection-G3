@@ -7,6 +7,7 @@ import {
   ModelInsightsData,
   ModelMetricName,
 } from "../utils/modelInsights";
+import { STANDARD_SYNC_INTERVAL_MS, type SyncCallbacks } from "../utils/sync";
 import { D3BarChart } from "./D3BarChart";
 import { DataColumn, DataTable } from "./DataTable";
 import { EmptyState } from "./EmptyState";
@@ -59,7 +60,15 @@ const metricColumns: DataColumn<ModelInsightItem>[] = [
   },
 ];
 
-export function ModelInsightsPage() {
+type ModelInsightsPageProps = SyncCallbacks & {
+  refreshNonce: number;
+};
+
+export function ModelInsightsPage({
+  refreshNonce,
+  onSyncSuccess,
+  onSyncFailure,
+}: ModelInsightsPageProps) {
   const [data, setData] = useState<ModelInsightsData | null>(null);
   const [status, setStatus] = useState<{
     type: "loading" | "success" | "error";
@@ -71,9 +80,16 @@ export function ModelInsightsPage() {
 
   useEffect(() => {
     let active = true;
+    let requestInFlight = false;
 
-    fetchModelInsights()
-      .then((nextData) => {
+    const loadModelInsights = async () => {
+      if (requestInFlight) {
+        return;
+      }
+      requestInFlight = true;
+
+      try {
+        const nextData = await fetchModelInsights();
         if (!active) {
           return;
         }
@@ -82,22 +98,32 @@ export function ModelInsightsPage() {
           type: "success",
           message: nextData.items.length > 0 ? "Model metrics loaded from the backend." : "No model metrics are available yet.",
         });
-      })
-      .catch(() => {
+        onSyncSuccess();
+      } catch {
         if (!active) {
           return;
         }
-        setData(null);
         setStatus({
           type: "error",
-          message: "Unable to load model metrics from the backend.",
+          message: "Model metrics sync failed. Existing data remains available.",
         });
-      });
+        onSyncFailure();
+      } finally {
+        requestInFlight = false;
+      }
+    };
+
+    void loadModelInsights();
+    const timer = window.setInterval(
+      () => void loadModelInsights(),
+      STANDARD_SYNC_INTERVAL_MS,
+    );
 
     return () => {
       active = false;
+      window.clearInterval(timer);
     };
-  }, []);
+  }, [refreshNonce, onSyncFailure, onSyncSuccess]);
 
   const recommended = data?.items.find((item) => item.recommended) ?? data?.items[0] ?? null;
 

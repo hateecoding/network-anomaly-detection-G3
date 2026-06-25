@@ -1,4 +1,10 @@
 import { useEffect, useRef } from "react";
+import * as d3 from "d3";
+import {
+  hideChartTooltip,
+  moveChartTooltip,
+  showChartTooltip,
+} from "../utils/d3ChartUtils";
 
 type BarDatum = {
   label: string;
@@ -10,9 +16,18 @@ type BarDatum = {
 type BarChartProps = {
   data: BarDatum[];
   height?: number;
+  onSelect?: (label: string) => void;
+  selectedLabel?: string | null;
+  ariaLabel?: string;
 };
 
-export function BarChart({ data, height = 280 }: BarChartProps) {
+export function BarChart({
+  data,
+  height = 280,
+  onSelect,
+  selectedLabel = null,
+  ariaLabel = "Bar chart",
+}: BarChartProps) {
   const ref = useRef<SVGSVGElement | null>(null);
   const width = 560;
   const margin = { top: 16, right: 38, bottom: 18, left: 136 };
@@ -66,7 +81,7 @@ export function BarChart({ data, height = 280 }: BarChartProps) {
       .call(axisLeft)
       .call((group: any) => group.select(".domain").remove());
 
-    svg
+    const bars = svg
       .append("g")
       .selectAll("rect")
       .data(data)
@@ -75,9 +90,26 @@ export function BarChart({ data, height = 280 }: BarChartProps) {
       .attr("x", margin.left)
       .attr("y", (item: BarDatum) => yScale(item.label) ?? margin.top)
       .attr("height", yScale.bandwidth())
-      .attr("width", (item: BarDatum) => xScale(item.value) - margin.left)
+      .attr("width", 0)
       .attr("rx", 8)
-      .attr("fill", (item: BarDatum) => item.color ?? "#5eead4");
+      .attr("fill", (item: BarDatum) => item.color ?? "#5eead4")
+      .attr("opacity", (item: BarDatum) =>
+        selectedLabel && selectedLabel !== item.label ? 0.35 : 1
+      )
+      .style("cursor", onSelect ? "pointer" : "default")
+      .on("pointerenter", (event: PointerEvent, item: BarDatum) =>
+        showChartTooltip(event, item.label, [
+          `${item.value}${item.suffix ?? ""}`,
+          onSelect ? "Click to filter" : "Backend-derived value",
+        ]),
+      )
+      .on("pointermove", (event: PointerEvent) => moveChartTooltip(event))
+      .on("pointerleave", hideChartTooltip)
+      .on("click", (_event: MouseEvent, item: BarDatum) => onSelect?.(item.label))
+      .transition()
+      .duration(600)
+      .ease(d3.easeCubicOut)
+      .attr("width", (item: BarDatum) => xScale(item.value) - margin.left);
 
     svg
       .append("g")
@@ -89,7 +121,7 @@ export function BarChart({ data, height = 280 }: BarChartProps) {
       .attr("x", (item: BarDatum) => xScale(item.value) + 8)
       .attr("y", (item: BarDatum) => (yScale(item.label) ?? margin.top) + yScale.bandwidth() / 2 + 4)
       .text((item: BarDatum) => `${item.value}${item.suffix ?? ""}`);
-  }, [data, height, margin.bottom, margin.left, margin.right, margin.top, width]);
+  }, [ariaLabel, data, height, margin.bottom, margin.left, margin.right, margin.top, onSelect, selectedLabel, width]);
 
-  return <svg ref={ref} className="d3-chart" role="img" aria-label="Feature importance chart" />;
+  return <svg ref={ref} className="d3-chart" role="img" aria-label={ariaLabel} />;
 }

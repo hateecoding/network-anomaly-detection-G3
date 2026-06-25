@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import * as d3 from "d3";
 
 type DataPoint = {
   label: string;
@@ -75,7 +76,7 @@ export function LineChart({ series, height = 260 }: LineChartProps) {
       .call((group: any) => group.select(".domain").remove());
 
     const lineBuilder = d3
-      .line()
+      .line<DataPoint>()
       .x((point: DataPoint) => xScale(point.label) ?? margin.left)
       .y((point: DataPoint) => yScale(point.value))
       .curve(d3.curveMonotoneX);

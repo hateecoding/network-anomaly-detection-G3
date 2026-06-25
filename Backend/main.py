@@ -144,8 +144,8 @@ async def model_loading_error_handler(request: Request, exc: ModelLoadingError):
     return build_error_response(
         status_code=503,
         code="model_loading_failed",
-        message="Model loading failed",
-        details=exc.details,
+        message="The prediction model is temporarily unavailable.",
+        details=exc.details if debug_endpoints_enabled() else None,
         stage=exc.stage,
     )
 
@@ -161,7 +161,11 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         status_code=500,
         code="internal_error",
         message="The backend could not complete the request.",
-        details=f"{type(exc).__name__}: {exc}",
+        details=(
+            f"{type(exc).__name__}: {exc}"
+            if debug_endpoints_enabled()
+            else None
+        ),
         stage="unhandled",
     )
 
@@ -227,7 +231,11 @@ async def upload_log(file: UploadFile = File(...)):
             status_code=400,
             code="upload_read_failed",
             message="Uploaded file could not be read.",
-            details=f"{type(exc).__name__}: {exc}",
+            details=(
+                f"{type(exc).__name__}: {exc}"
+                if debug_endpoints_enabled()
+                else None
+            ),
             stage="read_upload",
         )
     finally:
@@ -251,8 +259,8 @@ async def upload_log(file: UploadFile = File(...)):
         return build_error_response(
             status_code=503,
             code="model_loading_failed",
-            message="Model loading failed",
-            details=exc.details,
+            message="The prediction model is temporarily unavailable.",
+            details=exc.details if debug_endpoints_enabled() else None,
             stage=exc.stage,
         )
     except ValueError as exc:
@@ -274,7 +282,11 @@ async def upload_log(file: UploadFile = File(...)):
             status_code=500,
             code="upload_analysis_failed",
             message="Upload analysis failed.",
-            details=f"{type(exc).__name__}: {exc}",
+            details=(
+                f"{type(exc).__name__}: {exc}"
+                if debug_endpoints_enabled()
+                else None
+            ),
             stage="upload_log",
         )
 
@@ -292,7 +304,8 @@ def dashboard_summary():
     return DashboardSummaryResponse(
         generated_at=utcnow(),
         total_records=upload_summary["total_records"],
-        total_suspicious=upload_summary["total_suspicious"],
+        total_review_recommended=upload_summary["total_review_recommended"],
+        total_attacks=upload_summary["total_attacks"],
         total_normal=upload_summary["total_normal"],
         attack_percentage=upload_summary["attack_percentage"],
         recent_alerts_count=(

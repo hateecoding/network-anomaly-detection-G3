@@ -37,6 +37,10 @@ export async function requestJson<T>(
   return data as T;
 }
 
+export async function checkBackendHealth(): Promise<void> {
+  await requestJson<unknown>("/health");
+}
+
 function parseJson(value: string) {
   if (!value) {
     return null;

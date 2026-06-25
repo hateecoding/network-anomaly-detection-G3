@@ -7,7 +7,8 @@ import { requestJson } from "./api";
 
 type BackendDashboardSummary = {
   total_records: number;
-  total_suspicious: number;
+  total_review_recommended: number;
+  total_attacks: number;
   total_normal: number;
   attack_percentage: number;
   recent_alerts_count: number;
@@ -17,7 +18,8 @@ type BackendDashboardSummary = {
   recent_detections: {
     timestamp: string;
     total_records: number;
-    suspicious_records: number;
+    review_recommended_records: number;
+    attack_records: number;
   }[];
   latest_self_test_result?: {
     result: "attack" | "normal";
@@ -78,8 +80,6 @@ export async function fetchDashboardBackendData(): Promise<DashboardBackendData>
     requestJson<BackendTopRoutesResponse>("/top-routes?limit=5"),
   ]);
 
-  const attackRecords = Math.max(0, summary.total_suspicious);
-
   return {
     metrics: [
       {
@@ -90,9 +90,15 @@ export async function fetchDashboardBackendData(): Promise<DashboardBackendData>
       },
       {
         label: "Review Recommended",
-        value: summary.total_suspicious.toLocaleString(),
+        value: summary.total_review_recommended.toLocaleString(),
         helper: "Rows requiring analyst review",
         tone: "suspicious",
+      },
+      {
+        label: "Attack Records",
+        value: summary.total_attacks.toLocaleString(),
+        helper: "Rows classified as attack traffic",
+        tone: "attack",
       },
       {
         label: "Normal Records",
@@ -130,16 +136,27 @@ export async function fetchDashboardBackendData(): Promise<DashboardBackendData>
       },
       {
         label: "Review Recommended",
-        value: attackRecords,
+        value: summary.total_review_recommended,
         tone: "suspicious",
         color: "#fbbf24",
+      },
+      {
+        label: "Attack",
+        value: summary.total_attacks,
+        tone: "attack",
+        color: "#ef4444",
       },
     ],
     detectionTrend: summary.recent_detections.map((point) => ({
       label: formatTime(point.timestamp),
-      normal: Math.max(0, point.total_records - point.suspicious_records),
-      suspicious: point.suspicious_records,
-      attack: 0,
+      normal: Math.max(
+        0,
+        point.total_records -
+          point.review_recommended_records -
+          point.attack_records,
+      ),
+      suspicious: point.review_recommended_records,
+      attack: point.attack_records,
     })),
     alerts: alerts.items.map((alert, index) => ({
       id: `ALT-${String(index + 1).padStart(3, "0")}`,

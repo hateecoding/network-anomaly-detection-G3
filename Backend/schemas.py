@@ -1,85 +1,38 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Optional, Union
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class TrafficInput(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
-    duration: float = 0.0
-    src_bytes: float = 0.0
-    dst_bytes: float = 0.0
-    total_bytes: float = 0.0
-    byte_ratio: float = 0.0
-    activity_count: float = 0.0
-    service_count: float = 0.0
-    same_service_rate: float = 0.0
-    destination_host_count: float = 0.0
-    destination_host_service_count: float = 0.0
-    protocol_group: str = "OTHER"
-    service_group: str = "OTHER"
-    connection_group: str = "ERROR"
-    service_detail: str = "other"
-    connection_detail: str = "unknown"
-    protocol_type: str = "tcp"
-    flag: str = "sf"
-    count: int = 0
-    srv_count: int = 0
-    dst_host_count: int = 0
-    dst_host_srv_count: int = 0
-    same_srv_rate: float = 0.0
+    duration: float = Field(..., ge=0, le=604_800)
+    src_bytes: float = Field(..., ge=0)
+    dst_bytes: float = Field(..., ge=0)
+    total_bytes: float = Field(..., ge=0)
+    byte_ratio: float = Field(..., ge=0)
+    activity_count: float = Field(..., ge=0)
+    service_count: float = Field(..., ge=0)
+    same_service_rate: float = Field(..., ge=0, le=1)
+    destination_host_count: float = Field(..., ge=0)
+    destination_host_service_count: float = Field(..., ge=0)
+    protocol_group: Literal["TCP", "UDP", "ICMP", "OTHER"]
+    service_group: Literal["DNS", "EMAIL", "FILE", "INFRA", "OTHER", "REMOTE", "WEB"]
+    connection_group: Literal[
+        "Attempted",
+        "ERROR",
+        "Established",
+        "Rejected",
+        "Reset",
+    ]
+    service_detail: str = Field(..., min_length=1, max_length=64)
+    connection_detail: str = Field(..., min_length=1, max_length=64)
     source_ip: Optional[str] = None
     destination_ip: Optional[str] = None
     route: Optional[str] = None
-    label: Optional[Union[str, int]] = None
-    attack_name: Optional[str] = None
-    attack_cat: Optional[str] = None
-
-    dur: float = 0.0
-    proto: str = "tcp"
-    service: str = "-"
-    state: str = "no"
-    spkts: int = 0
-    dpkts: int = 0
-    sbytes: int = 0
-    dbytes: int = 0
-    rate: float = 0.0
-    sttl: int = 0
-    dttl: int = 0
-    sload: float = 0.0
-    dload: float = 0.0
-    sloss: int = 0
-    dloss: int = 0
-    sinpkt: float = 0.0
-    dinpkt: float = 0.0
-    sjit: float = 0.0
-    djit: float = 0.0
-    swin: int = 0
-    stcpb: int = 0
-    dtcpb: int = 0
-    dwin: int = 0
-    tcprtt: float = 0.0
-    synack: float = 0.0
-    ackdat: float = 0.0
-    smean: int = 0
-    dmean: int = 0
-    trans_depth: int = 0
-    response_body_len: int = 0
-    ct_srv_src: int = 0
-    ct_state_ttl: int = 0
-    ct_dst_ltm: int = 0
-    ct_src_dport_ltm: int = 0
-    ct_dst_sport_ltm: int = 0
-    ct_dst_src_ltm: int = 0
-    is_ftp_login: int = 0
-    ct_ftp_cmd: int = 0
-    ct_flw_http_mthd: int = 0
-    ct_src_ltm: int = 0
-    ct_srv_dst: int = 0
-    is_sm_ips_ports: int = 0
 
 
 class ModelPerformanceMetrics(BaseModel):
@@ -118,7 +71,8 @@ class PredictionResponse(BaseModel):
 class RecentDetectionPoint(BaseModel):
     timestamp: datetime
     total_records: int
-    suspicious_records: int
+    review_recommended_records: int
+    attack_records: int
 
 
 class AlertRecord(BaseModel):
@@ -137,7 +91,7 @@ class AlertRecord(BaseModel):
 
 
 class UploadModelBreakdown(BaseModel):
-    suspicious_records: int
+    attack_records: int
     normal_records: int
     attack_percentage: float
 
@@ -179,13 +133,12 @@ class UploadModelAnalysis(BaseModel):
 
 class UploadSummary(BaseModel):
     total_records: int
-    suspicious_records: int
-    suspicious_rows: int
+    review_recommended_records: int
+    review_recommended_rows: int
     normal_records: int
     normal_count: int
     attack_count: int
     attack_percentage: float
-    top_attack_type: Optional[str] = None
     model_used: str = "xgboost"
     best_model: str = "xgboost"
     selection_metric: Optional[str] = None
@@ -200,7 +153,18 @@ class UploadRecordResult(BaseModel):
     protocol: Optional[str] = None
     service: Optional[str] = None
     duration: Optional[float] = None
+    src_bytes: float
+    dst_bytes: float
+    total_bytes: float
+    byte_ratio: float
+    activity_count: float
+    service_count: float
+    same_service_rate: float
+    destination_host_count: float
+    destination_host_service_count: float
     prediction: int
+    model_prediction: Literal["attack", "normal"]
+    display_category: Literal["normal", "review_recommended", "attack"]
     result: Literal["attack", "normal"]
     detection_result: Literal["attack", "normal"]
     attack_probability: float
@@ -216,14 +180,29 @@ class UploadChartItem(BaseModel):
 
 class UploadTrendPoint(BaseModel):
     label: str
+    start_row: int
+    end_row: int
+    total_records: int
+    average_attack_probability: float
+    maximum_attack_probability: float
     normal: int
-    suspicious: int
+    review_recommended: int
     attack: int
+    most_common_protocol: Optional[str] = None
+
+
+class ProtocolRiskItem(BaseModel):
+    protocol: str
+    total_records: int
+    normal: int
+    review_recommended: int
+    attack: int
+    attack_rate: float
 
 
 class UploadChartData(BaseModel):
     trend: list[UploadTrendPoint] = Field(default_factory=list)
-    protocols: list[UploadChartItem] = Field(default_factory=list)
+    protocol_risk: list[ProtocolRiskItem] = Field(default_factory=list)
     top_source_ips: list[UploadChartItem] = Field(default_factory=list)
     confidence_buckets: list[ConfidenceBucket] = Field(default_factory=list)
 
@@ -236,10 +215,12 @@ class UploadAnalysisResponse(BaseModel):
     returned_records: int
     records_truncated: bool
     max_returned_records: int
+    review_threshold: float
+    attack_threshold: float
     chart_data: UploadChartData
     model_analysis: Optional[UploadModelAnalysis] = None
     alerts: list[AlertRecord] = Field(default_factory=list)
-    suspicious_rows: list[UploadRecordResult] = Field(default_factory=list)
+    review_recommended_rows: list[UploadRecordResult] = Field(default_factory=list)
     records: list[UploadRecordResult] = Field(default_factory=list)
 
 
@@ -299,7 +280,8 @@ class ModelMetricsResponse(BaseModel):
 class DashboardSummaryResponse(BaseModel):
     generated_at: datetime
     total_records: int
-    total_suspicious: int
+    total_review_recommended: int
+    total_attacks: int
     total_normal: int
     attack_percentage: float
     recent_alerts_count: int

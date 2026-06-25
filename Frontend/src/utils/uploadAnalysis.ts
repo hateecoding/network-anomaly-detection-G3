@@ -1,20 +1,26 @@
 import { requestJson } from "./api";
-import { getDisplayCategory, REVIEW_THRESHOLD } from "../config/thresholds";
-import type { AlertRecord, DetectionTrendPoint, UploadAnalysisRow } from "../data/presentationData";
+import type { AlertRecord, UploadAnalysisRow } from "../data/presentationData";
 
 const MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024;
+const MAX_CACHED_PREVIEW_ROWS = 1000;
+const UPLOAD_ANALYSIS_CACHE_KEY = "aegis-net.latest-upload-analysis";
+const UPLOAD_ANALYSIS_CACHE_VERSION = 2;
 const CSV_TEMPLATE_HEADERS = [
   "duration",
   "src_bytes",
   "dst_bytes",
-  "protocol_type",
-  "service",
-  "flag",
-  "count",
-  "srv_count",
-  "same_srv_rate",
-  "dst_host_count",
-  "dst_host_srv_count",
+  "total_bytes",
+  "byte_ratio",
+  "activity_count",
+  "service_count",
+  "same_service_rate",
+  "destination_host_count",
+  "destination_host_service_count",
+  "protocol_group",
+  "service_group",
+  "connection_group",
+  "service_detail",
+  "connection_detail",
 ];
 
 export type UploadAnalysisResult = {
@@ -33,7 +39,6 @@ export type UploadAnalysisSummary = {
   attackRecords: number;
   attackPercentage: number;
   riskScore: number;
-  topAttackType: string;
   processingStatus: "success" | "failed";
   filename: string;
   updatedAt: string;
@@ -41,10 +46,32 @@ export type UploadAnalysisSummary = {
 
 export type UploadAnalysisCharts = {
   composition: { label: string; value: number; color: string }[];
-  trend: DetectionTrendPoint[];
-  protocols: { label: string; value: number; color: string }[];
+  trend: UploadRiskTrendPoint[];
+  protocolRisk: ProtocolRiskPoint[];
   topSourceIps: { label: string; value: number; color: string }[];
-  confidenceBuckets: { label: string; value: number; color: string }[];
+  probabilityBuckets: { label: string; value: number; color: string }[];
+};
+
+export type UploadRiskTrendPoint = {
+  label: string;
+  startRow: number;
+  endRow: number;
+  totalRecords: number;
+  averageAttackProbability: number;
+  maximumAttackProbability: number;
+  normal: number;
+  reviewRecommended: number;
+  attack: number;
+  mostCommonProtocol: string | null;
+};
+
+export type ProtocolRiskPoint = {
+  protocol: string;
+  totalRecords: number;
+  normal: number;
+  reviewRecommended: number;
+  attack: number;
+  attackRate: number;
 };
 
 export type UploadAnalysisMetadata = {
@@ -52,6 +79,8 @@ export type UploadAnalysisMetadata = {
   returnedRecords: number;
   previewLimit: number;
   previewCapped: boolean;
+  reviewThreshold: number;
+  attackThreshold: number;
 };
 
 export type UploadModelAnalysisItem = {
@@ -100,7 +129,18 @@ type BackendUploadRecord = {
   protocol?: string | null;
   service?: string | null;
   duration?: number | null;
+  src_bytes: number;
+  dst_bytes: number;
+  total_bytes: number;
+  byte_ratio: number;
+  activity_count: number;
+  service_count: number;
+  same_service_rate: number;
+  destination_host_count: number;
+  destination_host_service_count: number;
   prediction?: number;
+  model_prediction: "attack" | "normal";
+  display_category: "normal" | "review_recommended" | "attack";
   result: "attack" | "normal";
   detection_result?: "attack" | "normal";
   confidence: number;
@@ -115,26 +155,40 @@ type BackendUploadResponse = {
   returned_records: number;
   records_truncated: boolean;
   max_returned_records: number;
+  review_threshold: number;
+  attack_threshold: number;
   chart_data: {
     trend: {
       label: string;
+      start_row: number;
+      end_row: number;
+      total_records: number;
+      average_attack_probability: number;
+      maximum_attack_probability: number;
       normal: number;
-      suspicious: number;
+      review_recommended: number;
       attack: number;
+      most_common_protocol?: string | null;
     }[];
-    protocols: { label: string; count: number }[];
+    protocol_risk: {
+      protocol: string;
+      total_records: number;
+      normal: number;
+      review_recommended: number;
+      attack: number;
+      attack_rate: number;
+    }[];
     top_source_ips: { label: string; count: number }[];
     confidence_buckets: { label: string; count: number }[];
   };
   summary: {
     total_records: number;
-    suspicious_records: number;
-    suspicious_rows?: number;
+    review_recommended_records: number;
+    review_recommended_rows?: number;
     normal_records: number;
     normal_count?: number;
     attack_count?: number;
     attack_percentage: number;
-    top_attack_type?: string | null;
   };
   model_analysis?: {
     labels_available: boolean;
@@ -162,7 +216,7 @@ type BackendUploadResponse = {
     }[];
   } | null;
   alerts: BackendUploadAlert[];
-  suspicious_rows?: BackendUploadRecord[];
+  review_recommended_rows?: BackendUploadRecord[];
   records: BackendUploadRecord[];
 };
 
@@ -185,14 +239,69 @@ export async function analyzeUploadedFile(file: File): Promise<UploadAnalysisRes
   }
 }
 
-export function exportUploadRows(rows: UploadAnalysisRow[]) {
+export function loadCachedUploadAnalysis(): UploadAnalysisResult | null {
+  try {
+    const raw = window.localStorage.getItem(UPLOAD_ANALYSIS_CACHE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const cached: unknown = JSON.parse(raw);
+    if (!isCompatibleCacheEntry(cached)) {
+      clearCachedUploadAnalysis();
+      return null;
+    }
+
+    return {
+      ...cached.data,
+      rows: cached.data.rows.slice(0, MAX_CACHED_PREVIEW_ROWS),
+    };
+  } catch {
+    clearCachedUploadAnalysis();
+    return null;
+  }
+}
+
+export function saveCachedUploadAnalysis(result: UploadAnalysisResult): boolean {
+  try {
+    const cacheEntry = {
+      version: UPLOAD_ANALYSIS_CACHE_VERSION,
+      savedAt: new Date().toISOString(),
+      data: {
+        ...result,
+        rows: result.rows.slice(0, MAX_CACHED_PREVIEW_ROWS),
+      },
+    };
+    window.localStorage.setItem(UPLOAD_ANALYSIS_CACHE_KEY, JSON.stringify(cacheEntry));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function clearCachedUploadAnalysis() {
+  try {
+    window.localStorage.removeItem(UPLOAD_ANALYSIS_CACHE_KEY);
+  } catch {
+    // Storage can be unavailable in private or restricted browser contexts.
+  }
+}
+
+export function exportUploadRows(
+  rows: UploadAnalysisRow[],
+  analysis?: UploadAnalysisResult,
+) {
   const header = [
+    "analysisFilename",
+    "analysisTimestamp",
+    "modelUsed",
     "rowId",
     "recordNumber",
     "sourceIp",
     "destinationIp",
     "protocol",
-    "prediction",
+    "modelPrediction",
+    "displayCategory",
     "confidence",
     "attackProbability",
     "detectionResult",
@@ -201,11 +310,15 @@ export function exportUploadRows(rows: UploadAnalysisRow[]) {
 
   const content = rows.map((row) =>
     [
+      analysis?.summary.filename ?? "",
+      analysis?.summary.updatedAt ?? "",
+      analysis?.modelAnalysis.bestModel ?? "",
       row.rowId,
       row.recordNumber,
       row.sourceIp,
       row.destinationIp,
       row.protocol,
+      row.modelPrediction,
       row.prediction,
       row.confidence,
       row.attackProbability,
@@ -226,19 +339,47 @@ export function exportUploadRows(rows: UploadAnalysisRow[]) {
   URL.revokeObjectURL(url);
 }
 
+export function exportUploadAnalysisJson(
+  analysis: UploadAnalysisResult,
+  rows: UploadAnalysisRow[],
+) {
+  const payload = {
+    filename: analysis.summary.filename,
+    generated_at: analysis.summary.updatedAt,
+    summary: analysis.summary,
+    metadata: analysis.metadata,
+    charts: analysis.charts,
+    model_analysis: analysis.modelAnalysis,
+    exported_rows: rows,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "aegis-net-analysis.json";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export function exportCsvTemplate() {
   const example = [
     "12.5",
     "1200",
     "450",
-    "tcp",
-    "http",
-    "SF",
+    "1650",
+    "2.6667",
     "8",
     "4",
     "0.5",
     "12",
     "6",
+    "TCP",
+    "WEB",
+    "Established",
+    "http",
+    "sf",
   ];
   const blob = new Blob([[CSV_TEMPLATE_HEADERS.join(","), example.join(",")].join("\n")], {
     type: "text/csv;charset=utf-8",
@@ -266,12 +407,47 @@ function validateUploadFile(file: File) {
   }
 }
 
+function isCompatibleCacheEntry(
+  value: unknown,
+): value is { version: number; savedAt: string; data: UploadAnalysisResult } {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const entry = value as {
+    version?: unknown;
+    savedAt?: unknown;
+    data?: Partial<UploadAnalysisResult>;
+  };
+  const data = entry.data;
+
+  return (
+    entry.version === UPLOAD_ANALYSIS_CACHE_VERSION &&
+    typeof entry.savedAt === "string" &&
+    Boolean(data) &&
+    Array.isArray(data?.rows) &&
+    data.rows.length <= MAX_CACHED_PREVIEW_ROWS &&
+    Array.isArray(data?.alerts) &&
+    Boolean(data?.summary) &&
+    typeof data?.summary?.totalRecords === "number" &&
+    typeof data?.summary?.filename === "string" &&
+    Boolean(data?.charts) &&
+    Array.isArray(data?.charts?.composition) &&
+    Array.isArray(data?.charts?.trend) &&
+    Boolean(data?.metadata) &&
+    typeof data?.metadata?.totalRecords === "number" &&
+    typeof data?.metadata?.returnedRecords === "number" &&
+    Boolean(data?.modelAnalysis) &&
+    Array.isArray(data?.modelAnalysis?.models)
+  );
+}
+
 function mapUploadAnalysis(response: BackendUploadResponse): UploadAnalysisResult {
   const rows = buildPreviewRows(response.records.map((record) => mapUploadRow(record)));
   const alerts = response.alerts.map((alert, index) => mapUploadAlert(alert, index));
   const attackRecords = response.chart_data.trend.reduce((total, point) => total + point.attack, 0);
   const suspiciousRecords = response.chart_data.trend.reduce(
-    (total, point) => total + point.suspicious,
+    (total, point) => total + point.review_recommended,
     0,
   );
   const normalRecords = response.chart_data.trend.reduce((total, point) => total + point.normal, 0);
@@ -291,7 +467,6 @@ function mapUploadAnalysis(response: BackendUploadResponse): UploadAnalysisResul
       attackRecords,
       attackPercentage,
       riskScore: calculateRiskScore(attackPercentage, suspiciousRecords, totalRecords),
-      topAttackType: response.summary.top_attack_type || "Not reported",
       processingStatus: "success",
       filename: response.filename,
       updatedAt: response.generated_at,
@@ -307,6 +482,8 @@ function mapUploadAnalysis(response: BackendUploadResponse): UploadAnalysisResul
       returnedRecords: response.returned_records,
       previewLimit: response.max_returned_records,
       previewCapped: response.records_truncated,
+      reviewThreshold: response.review_threshold,
+      attackThreshold: response.attack_threshold,
     },
     modelAnalysis: mapModelAnalysis(response.model_analysis),
   };
@@ -366,10 +543,25 @@ function mapUploadRow(record: BackendUploadRecord): UploadAnalysisRow {
     protocol: (record.protocol || "tcp").toUpperCase(),
     service: (record.service || "-").toLowerCase(),
     duration: Number(record.duration || 0),
+    srcBytes: record.src_bytes,
+    dstBytes: record.dst_bytes,
+    totalBytes: record.total_bytes,
+    byteRatio: record.byte_ratio,
+    activityCount: record.activity_count,
+    serviceCount: record.service_count,
+    sameServiceRate: record.same_service_rate,
+    destinationHostCount: record.destination_host_count,
+    destinationHostServiceCount: record.destination_host_service_count,
+    modelPrediction: record.model_prediction === "attack" ? "Attack" : "Normal",
     prediction,
     confidence: Math.round(clamp(record.confidence, 0, 1) * 100),
     alertLevel: mapAlertLevel(record.alert_level, prediction, probabilityPercent),
-    detectionResult: prediction === "Attack" ? "THREAT DETECTED" : "SAFE",
+    detectionResult:
+      prediction === "Attack"
+        ? "ATTACK DETECTED"
+        : prediction === "Review Recommended"
+          ? "REVIEW RECOMMENDED"
+          : "NORMAL",
     attackProbability: probabilityPercent,
   };
 }
@@ -377,7 +569,13 @@ function mapUploadRow(record: BackendUploadRecord): UploadAnalysisRow {
 function mapUploadPrediction(
   record: BackendUploadRecord,
 ): UploadAnalysisRow["prediction"] {
-  return getDisplayCategory(record.result, record.attack_probability);
+  if (record.display_category === "attack") {
+    return "Attack";
+  }
+  if (record.display_category === "review_recommended") {
+    return "Review Recommended";
+  }
+  return "Normal";
 }
 
 function mapUploadAlert(alert: BackendUploadAlert, index: number): AlertRecord {
@@ -418,7 +616,7 @@ function mapAlertLevel(
     return level.toLowerCase() === "high" ? "High" : "Medium";
   }
 
-  if (prediction === "Review Recommended" || probabilityPercent >= REVIEW_THRESHOLD * 100) {
+  if (prediction === "Review Recommended") {
     return "Medium";
   }
 
@@ -450,21 +648,35 @@ function buildUploadCharts(
       { label: "Review Recommended", value: summary.suspiciousRecords, color: "#fbbf24" },
       { label: "Attack", value: summary.attackRecords, color: "#f97316" },
     ],
-    trend: chartData.trend,
-    protocols: chartData.protocols.map((item, index) => ({
-      label: item.label,
-      value: item.count,
-      color: ["#60a5fa", "#5eead4", "#fbbf24", "#94a3b8"][index % 4],
+    trend: chartData.trend.map((point) => ({
+      label: point.label,
+      startRow: point.start_row,
+      endRow: point.end_row,
+      totalRecords: point.total_records,
+      averageAttackProbability: point.average_attack_probability,
+      maximumAttackProbability: point.maximum_attack_probability,
+      normal: point.normal,
+      reviewRecommended: point.review_recommended,
+      attack: point.attack,
+      mostCommonProtocol: point.most_common_protocol ?? null,
+    })),
+    protocolRisk: chartData.protocol_risk.map((item) => ({
+      protocol: item.protocol,
+      totalRecords: item.total_records,
+      normal: item.normal,
+      reviewRecommended: item.review_recommended,
+      attack: item.attack,
+      attackRate: item.attack_rate,
     })),
     topSourceIps: chartData.top_source_ips.map((item) => ({
       label: item.label,
       value: item.count,
       color: "#f97316",
     })),
-    confidenceBuckets: chartData.confidence_buckets.map((item) => ({
+    probabilityBuckets: chartData.confidence_buckets.map((item, index) => ({
       label: item.label,
       value: item.count,
-      color: "#60a5fa",
+      color: ["#34d399", "#5eead4", "#fbbf24", "#fb923c", "#ef4444"][index],
     })),
   };
 }

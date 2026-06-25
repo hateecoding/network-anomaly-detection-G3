@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import * as d3 from "d3";
 
 type HeatmapDatum = {
   x: string;
@@ -42,7 +43,7 @@ export function D3HeatmapChart({ data, height = 260 }: D3HeatmapChartProps) {
       .padding(0.08);
 
     const colorScale = d3
-      .scaleLinear()
+      .scaleLinear<string>()
       .domain([0, maxValue || 1])
       .range(["rgba(96, 165, 250, 0.14)", "#f97316"]);
 

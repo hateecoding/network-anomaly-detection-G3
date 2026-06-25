@@ -12,6 +12,7 @@ type DataTableProps<T> = {
   rows: T[];
   rowKey: (row: T) => string;
   rowClassName?: (row: T) => string;
+  onRowClick?: (row: T) => void;
   emptyState?: ReactNode;
 };
 
@@ -20,6 +21,7 @@ export function DataTable<T>({
   rows,
   rowKey,
   rowClassName,
+  onRowClick,
   emptyState,
 }: DataTableProps<T>) {
   if (rows.length === 0) {
@@ -40,7 +42,19 @@ export function DataTable<T>({
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={rowKey(row)} className={rowClassName ? rowClassName(row) : ""}>
+            <tr
+              key={rowKey(row)}
+              className={`${rowClassName ? rowClassName(row) : ""} ${onRowClick ? "data-table-row-actionable" : ""}`.trim()}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              onKeyDown={onRowClick ? (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onRowClick(row);
+                }
+              } : undefined}
+              role={onRowClick ? "button" : undefined}
+              tabIndex={onRowClick ? 0 : undefined}
+            >
               {columns.map((column) => (
                 <td key={column.key} className={`table-align-${column.align ?? "left"}`}>
                   {column.render(row)}

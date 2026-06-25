@@ -19,3 +19,5 @@ Frontend/vite.config.d.ts
 # Local environment files
 .env
 .env.*
+!.env.example
+!**/.env.example

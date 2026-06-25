@@ -371,6 +371,66 @@ def _text_series(
     return source_series.astype(str).str.strip()
 
 
+def _validate_raw_network_input(raw_df: pd.DataFrame) -> None:
+    cleaned_df = clean_column_names(raw_df)
+    source_lookup = _build_source_lookup(cleaned_df)
+    required_groups = {
+        "duration": FIELD_ALIASES["duration"],
+        "source bytes": FIELD_ALIASES["src_bytes"],
+        "destination bytes": FIELD_ALIASES["dst_bytes"],
+        "activity count": FIELD_ALIASES["activity_count"],
+        "service count": FIELD_ALIASES["service_count"],
+        "destination host count": FIELD_ALIASES["destination_host_count"],
+        "destination host service count": FIELD_ALIASES[
+            "destination_host_service_count"
+        ],
+        "protocol": FIELD_ALIASES["protocol_group"] | FIELD_ALIASES["protocol_raw"],
+        "service": FIELD_ALIASES["service_group"] | FIELD_ALIASES["service_raw"],
+        "connection state": (
+            FIELD_ALIASES["connection_group"] | FIELD_ALIASES["connection_raw"]
+        ),
+    }
+    missing = [
+        label
+        for label, aliases in required_groups.items()
+        if _series_from_aliases(cleaned_df, source_lookup, aliases) is None
+    ]
+    if missing:
+        raise ValueError(
+            "Uploaded data is missing required traffic fields: "
+            + ", ".join(missing)
+            + ". Download the CSV template for the supported schema."
+        )
+
+    numeric_groups = {
+        "duration": FIELD_ALIASES["duration"],
+        "source bytes": FIELD_ALIASES["src_bytes"],
+        "destination bytes": FIELD_ALIASES["dst_bytes"],
+        "activity count": FIELD_ALIASES["activity_count"],
+        "service count": FIELD_ALIASES["service_count"],
+        "destination host count": FIELD_ALIASES["destination_host_count"],
+        "destination host service count": FIELD_ALIASES[
+            "destination_host_service_count"
+        ],
+    }
+    row_errors: list[str] = []
+    for label, aliases in numeric_groups.items():
+        series = _series_from_aliases(cleaned_df, source_lookup, aliases)
+        if series is None:
+            continue
+        numeric = pd.to_numeric(series, errors="coerce")
+        invalid_rows = numeric[numeric.isna()].index.tolist()
+        negative_rows = numeric[numeric < 0].index.tolist()
+        for row_index in invalid_rows[:3]:
+            row_errors.append(f"row {row_index + 2}: {label} must be numeric")
+        for row_index in negative_rows[:3]:
+            row_errors.append(f"row {row_index + 2}: {label} cannot be negative")
+
+    if row_errors:
+        preview = "; ".join(row_errors[:10])
+        raise ValueError(f"Uploaded data contains invalid values: {preview}.")
+
+
 def _canonical_model_input(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     cleaned_df = clean_column_names(raw_df)
     source_lookup = _build_source_lookup(cleaned_df)
@@ -591,6 +651,8 @@ def _canonical_model_input(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataF
     )
 
     context_df["duration"] = model_input_df["duration"]
+    for column in NUMERIC_FEATURES:
+        context_df[column] = model_input_df[column]
     context_df["protocol"] = (
         _metadata_series(cleaned_df, source_lookup, FIELD_ALIASES["protocol_raw"])
         .fillna(model_input_df["protocol_group"])
@@ -673,25 +735,8 @@ def apply_known_headerless_schema(raw_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def prepare_batch_input(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    _validate_raw_network_input(raw_df)
     model_input_df, context_df = _canonical_model_input(raw_df)
-
-    if not any(
-        column in clean_column_names(raw_df).columns
-        for column in (
-            "dur",
-            "duration",
-            "src_bytes",
-            "sbytes",
-            "dst_bytes",
-            "dbytes",
-            "protocol_group",
-            "proto",
-            "protocol_type",
-        )
-    ):
-        raise ValueError(
-            "Uploaded data does not contain supported network traffic feature columns."
-        )
 
     processed_df = encode_features(model_input_df)
     return processed_df, context_df

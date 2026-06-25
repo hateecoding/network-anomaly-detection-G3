@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { VisitorIdentifier } from "../data/presentationData";
 import { fetchLiveTrafficData, type LiveTrafficData } from "../utils/liveVisitors";
+import { LIVE_SYNC_INTERVAL_MS, type SyncCallbacks } from "../utils/sync";
 import { D3BarChart } from "./D3BarChart";
 import { DataColumn, DataTable } from "./DataTable";
 import { EmptyState } from "./EmptyState";
@@ -10,7 +11,7 @@ import { RouteList } from "./RouteList";
 import { SummaryCard } from "./SummaryCard";
 import { VisitorTable } from "./VisitorTable";
 
-type LiveVisitorsPageProps = {
+type LiveVisitorsPageProps = SyncCallbacks & {
   refreshNonce: number;
 };
 
@@ -43,7 +44,11 @@ const visitorColumns: DataColumn<VisitorIdentifier>[] = [
   },
 ];
 
-export function LiveVisitorsPage({ refreshNonce }: LiveVisitorsPageProps) {
+export function LiveVisitorsPage({
+  refreshNonce,
+  onSyncSuccess,
+  onSyncFailure,
+}: LiveVisitorsPageProps) {
   const [traffic, setTraffic] = useState<LiveTrafficData | null>(null);
   const [status, setStatus] = useState<{
     type: "loading" | "success" | "error";
@@ -55,8 +60,14 @@ export function LiveVisitorsPage({ refreshNonce }: LiveVisitorsPageProps) {
 
   useEffect(() => {
     let active = true;
+    let requestInFlight = false;
 
     const loadTraffic = async (showLoading = false) => {
+      if (requestInFlight) {
+        return;
+      }
+      requestInFlight = true;
+
       if (showLoading) {
         setStatus({ type: "loading", message: "Loading live traffic..." });
       }
@@ -71,6 +82,7 @@ export function LiveVisitorsPage({ refreshNonce }: LiveVisitorsPageProps) {
           type: "success",
           message: "Live backend activity refreshed.",
         });
+        onSyncSuccess();
       } catch {
         if (!active) {
           return;
@@ -79,17 +91,23 @@ export function LiveVisitorsPage({ refreshNonce }: LiveVisitorsPageProps) {
           type: "error",
           message: "Unable to load live traffic. Please try again.",
         });
+        onSyncFailure();
+      } finally {
+        requestInFlight = false;
       }
     };
 
-    loadTraffic(true);
-    const timer = window.setInterval(() => loadTraffic(false), 5000);
+    void loadTraffic(true);
+    const timer = window.setInterval(
+      () => void loadTraffic(false),
+      LIVE_SYNC_INTERVAL_MS,
+    );
 
     return () => {
       active = false;
       window.clearInterval(timer);
     };
-  }, [refreshNonce]);
+  }, [refreshNonce, onSyncFailure, onSyncSuccess]);
 
   const hasActivity = Boolean(traffic && traffic.totalRequestsLast5Minutes > 0);
 

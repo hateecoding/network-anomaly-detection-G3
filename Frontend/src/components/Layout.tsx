@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useState } from "react";
 import { Tone } from "../data/presentationData";
+import type { SyncStatus } from "../utils/sync";
 import { StatusBadge } from "./StatusBadge";
 
 export type PageId =
@@ -48,7 +49,8 @@ const pageHeadings: Record<PageId, { title: string; subtitle: string }> = {
 
 type LayoutProps = {
   activePage: PageId;
-  lastRefreshAt: Date;
+  lastSyncAt: Date | null;
+  syncStatus: SyncStatus;
   onNavigate: (page: PageId) => void;
   onRefresh: () => void;
   children: ReactNode;
@@ -56,7 +58,8 @@ type LayoutProps = {
 
 export function Layout({
   activePage,
-  lastRefreshAt,
+  lastSyncAt,
+  syncStatus,
   onNavigate,
   onRefresh,
   children,
@@ -135,9 +138,27 @@ export function Layout({
               Refresh
             </button>
             <StatusBadge label="Production" tone="info" />
-            <div className="signal-card">
+            <div
+              className={`signal-card signal-card-${syncStatus}`}
+              title={
+                lastSyncAt
+                  ? `Last successful sync: ${formatExactTimestamp(lastSyncAt)}`
+                  : "Waiting for the first successful backend sync."
+              }
+            >
               <span className="signal-dot" />
-              Last sync {formatTimestamp(lastRefreshAt)}
+              <span className="signal-copy">
+                <span>
+                  {syncStatus === "error"
+                    ? "Sync failed, retrying..."
+                    : syncStatus === "syncing"
+                      ? "Syncing..."
+                      : `Last sync ${formatExactTimestamp(lastSyncAt)}`}
+                </span>
+                {syncStatus !== "success" && lastSyncAt ? (
+                  <small>Last sync {formatExactTimestamp(lastSyncAt)}</small>
+                ) : null}
+              </span>
             </div>
             <div className="clock-card">{formatTimestamp(now)}</div>
           </div>
@@ -153,5 +174,19 @@ function formatTimestamp(date: Date) {
   return new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
     minute: "2-digit",
+  }).format(date);
+}
+
+function formatExactTimestamp(date: Date | null) {
+  if (!date) {
+    return "not available";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
   }).format(date);
 }

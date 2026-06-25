@@ -39,11 +39,21 @@ export type UploadAnalysisRow = {
   protocol: string;
   service: string;
   duration: number;
+  srcBytes: number;
+  dstBytes: number;
+  totalBytes: number;
+  byteRatio: number;
+  activityCount: number;
+  serviceCount: number;
+  sameServiceRate: number;
+  destinationHostCount: number;
+  destinationHostServiceCount: number;
+  modelPrediction: "Normal" | "Attack";
   prediction: "Normal" | "Review Recommended" | "Attack";
   confidence: number;
   attackProbability: number;
   alertLevel: "Low" | "Medium" | "High";
-  detectionResult: "SAFE" | "THREAT DETECTED";
+  detectionResult: "NORMAL" | "REVIEW RECOMMENDED" | "ATTACK DETECTED";
 };
 
 export type VisitorIdentifier = {
