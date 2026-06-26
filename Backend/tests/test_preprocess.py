@@ -58,6 +58,58 @@ class PreprocessValidationTests(unittest.TestCase):
         self.assertEqual(processed.shape, (1, 67))
         self.assertEqual(context.iloc[0]["total_bytes"], 30)
 
+    def test_simple_kdd_schema_derives_destination_host_fields(self):
+        frame = pd.DataFrame(
+            [
+                {
+                    "duration": 0,
+                    "protocol_type": "tcp",
+                    "service": "http",
+                    "flag": "SF",
+                    "src_bytes": 232,
+                    "dst_bytes": 8153,
+                    "count": 5,
+                    "srv_count": 5,
+                    "serror_rate": 0.2,
+                    "label": "normal",
+                }
+            ]
+        )
+
+        processed, context = prepare_batch_input(frame)
+
+        self.assertEqual(processed.shape, (1, 67))
+        self.assertEqual(context.iloc[0]["activity_count"], 5)
+        self.assertEqual(context.iloc[0]["service_count"], 5)
+        self.assertEqual(context.iloc[0]["destination_host_count"], 5)
+        self.assertEqual(context.iloc[0]["destination_host_service_count"], 5)
+        self.assertEqual(context.iloc[0]["same_service_rate"], 1.0)
+
+    def test_simple_kdd_schema_allows_blank_numeric_cells(self):
+        frame = pd.DataFrame(
+            [
+                {
+                    "duration": "",
+                    "protocol_type": "tcp",
+                    "service": "private",
+                    "flag": "S0",
+                    "src_bytes": "",
+                    "dst_bytes": 0,
+                    "count": "",
+                    "srv_count": 6,
+                    "serror_rate": 1.0,
+                    "label": "neptune",
+                }
+            ]
+        )
+
+        processed, context = prepare_batch_input(frame)
+
+        self.assertEqual(processed.shape, (1, 67))
+        self.assertEqual(context.iloc[0]["duration"], 0)
+        self.assertEqual(context.iloc[0]["src_bytes"], 0)
+        self.assertEqual(context.iloc[0]["activity_count"], 0)
+
     def test_missing_required_fields_are_rejected(self):
         with self.assertRaisesRegex(ValueError, "missing required traffic fields"):
             prepare_batch_input(pd.DataFrame([{"duration": 1, "src_bytes": 10}]))

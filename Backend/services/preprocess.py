@@ -571,10 +571,6 @@ def _validate_raw_network_input(raw_df: pd.DataFrame) -> None:
         "destination bytes": FIELD_ALIASES["dst_bytes"],
         "activity count": FIELD_ALIASES["activity_count"],
         "service count": FIELD_ALIASES["service_count"],
-        "destination host count": FIELD_ALIASES["destination_host_count"],
-        "destination host service count": FIELD_ALIASES[
-            "destination_host_service_count"
-        ],
         "protocol": FIELD_ALIASES["protocol_group"] | FIELD_ALIASES["protocol_raw"],
         "service": FIELD_ALIASES["service_group"] | FIELD_ALIASES["service_raw"],
         "connection state": (
@@ -610,7 +606,8 @@ def _validate_raw_network_input(raw_df: pd.DataFrame) -> None:
         if series is None:
             continue
         numeric = pd.to_numeric(series, errors="coerce")
-        invalid_rows = numeric[numeric.isna()].index.tolist()
+        present_values = series.map(_text_value).notna()
+        invalid_rows = numeric[numeric.isna() & present_values].index.tolist()
         negative_rows = numeric[numeric < 0].index.tolist()
         for row_index in invalid_rows[:3]:
             row_errors.append(f"row {row_index + 2}: {label} must be numeric")

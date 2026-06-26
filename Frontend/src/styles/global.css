@@ -2469,7 +2469,7 @@ button {
 }
 
 .upload-dashboard-page .upload-chart-grid-primary {
-  grid-template-columns: minmax(360px, 0.92fr) minmax(0, 1.45fr);
+  grid-template-columns: minmax(420px, 0.9fr) minmax(680px, 1.55fr);
 }
 
 .upload-dashboard-page .upload-chart-grid-secondary {
@@ -2516,20 +2516,22 @@ button {
 
 .chart-insight-layout {
   display: grid;
-  grid-template-columns: minmax(190px, 0.72fr) minmax(0, 1.5fr);
+  grid-template-columns: minmax(220px, 0.32fr) minmax(420px, 1fr);
   gap: clamp(14px, 1.3vw, 22px);
   align-items: stretch;
   min-width: 0;
 }
 
 .chart-insight-export-wide .chart-insight-layout {
-  grid-template-columns: minmax(220px, 0.55fr) minmax(0, 1.8fr);
+  grid-template-columns: minmax(220px, 0.28fr) minmax(620px, 1fr);
 }
 
 .chart-insight-panel {
   display: flex;
   flex-direction: column;
   gap: 9px;
+  width: 100%;
+  max-width: 320px;
   min-width: 0;
   padding: clamp(12px, 1vw, 16px);
   border: 1px solid rgba(96, 165, 250, 0.14);
@@ -2583,8 +2585,10 @@ button {
 
 .chart-insight-visual {
   display: grid;
+  width: 100%;
   min-width: 0;
   align-content: stretch;
+  justify-items: stretch;
 }
 
 .upload-dashboard-page .chart-card-export-button {
@@ -2624,22 +2628,29 @@ button {
 }
 
 .upload-dashboard-page .upload-chart-grid-primary .d3-chart {
-  height: clamp(315px, 28vw, 410px);
+  height: clamp(340px, 29vw, 430px);
 }
 
 .upload-dashboard-page .upload-chart-grid-secondary .d3-chart {
   min-height: 0;
-  height: clamp(300px, 24vw, 360px);
+  height: clamp(320px, 24vw, 380px);
 }
 
 .upload-dashboard-page .pie-chart-shell {
-  grid-template-columns: minmax(210px, 270px) minmax(0, 1fr);
+  grid-template-columns: minmax(220px, 300px) minmax(180px, 1fr);
   gap: clamp(14px, 1.2vw, 22px);
   align-items: center;
+  justify-content: center;
 }
 
 .upload-dashboard-page .pie-chart-wrap {
-  max-width: 270px;
+  width: min(100%, 300px);
+  max-width: 300px;
+  margin-inline: auto;
+}
+
+.upload-dashboard-page .pie-chart {
+  overflow: visible;
 }
 
 .upload-dashboard-page .pie-chart-center span {
@@ -2693,6 +2704,32 @@ button {
 .upload-dashboard-page .d3-axis text,
 .upload-dashboard-page .d3-value-label {
   font-size: clamp(12px, 0.72vw, 14px);
+}
+
+@media (max-width: 1500px) {
+  .chart-insight-layout,
+  .chart-insight-export-wide .chart-insight-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .chart-insight-panel {
+    max-width: none;
+  }
+
+  .upload-dashboard-page .pie-chart-shell {
+    grid-template-columns: minmax(240px, 320px) minmax(220px, 1fr);
+  }
+}
+
+@media (max-width: 1320px) {
+  .upload-dashboard-page .upload-chart-grid-primary,
+  .upload-dashboard-page .upload-chart-grid-secondary {
+    grid-template-columns: 1fr;
+  }
+
+  .upload-dashboard-page .upload-chart-grid-secondary > :last-child {
+    grid-column: auto;
+  }
 }
 
 .upload-dashboard-page .explanation-panel {
@@ -2949,7 +2986,7 @@ button {
   }
 
   .chart-insight-panel {
-    order: 2;
+    order: 0;
   }
 }
 
@@ -3161,11 +3198,11 @@ button {
   }
 
   .upload-dashboard-page .upload-chart-grid-secondary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .upload-dashboard-page .upload-chart-grid-secondary > :last-child {
-    grid-column: 1 / -1;
+    grid-column: auto;
   }
 }
 
