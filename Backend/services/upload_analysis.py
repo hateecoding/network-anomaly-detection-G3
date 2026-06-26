@@ -34,6 +34,7 @@ from services.predict import predict_processed_frame
 from services.preprocess import (
     apply_known_headerless_schema,
     get_feature_columns,
+    get_preprocessing_status,
     prepare_batch_input,
 )
 
@@ -561,6 +562,7 @@ def analyze_upload_file(filename: str, contents: bytes) -> UploadAnalysisRespons
         max_returned_records=MAX_RETURNED_RECORDS,
         review_threshold=REVIEW_THRESHOLD,
         attack_threshold=ATTACK_THRESHOLD,
+        preprocessing=get_preprocessing_status(),
         chart_data=UploadChartData(
             trend=[
                 UploadTrendPoint(

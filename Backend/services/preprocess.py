@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
+import logging
+import os
 from pathlib import Path
+import tempfile
 from typing import Any
 
+import joblib
 import numpy as np
 import pandas as pd
 
-from schemas import TrafficInput
+from schemas import PreprocessingStatus, TrafficInput
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = BASE_DIR.parent
@@ -16,6 +20,73 @@ FEATURE_COLUMNS_CANDIDATES = (
     BASE_DIR / "feature_columns.json",
     BASE_DIR / "anomaly-model-artifacts" / "feature_columns.json",
 )
+PREPROCESSOR_FILENAME = "preprocessing_pipeline.pkl"
+PREPROCESSOR_JSON_FILENAME = "preprocessing_pipeline.json"
+PREPROCESSOR_CANDIDATES = (
+    BASE_DIR / PREPROCESSOR_FILENAME,
+    BASE_DIR / PREPROCESSOR_JSON_FILENAME,
+    BASE_DIR / "anomaly-model-artifacts" / PREPROCESSOR_FILENAME,
+    BASE_DIR / "anomaly-model-artifacts" / PREPROCESSOR_JSON_FILENAME,
+    PROJECT_ROOT / "models" / PREPROCESSOR_FILENAME,
+    PROJECT_ROOT / "models" / PREPROCESSOR_JSON_FILENAME,
+)
+PREPROCESSOR_DOWNLOAD_DIR = (
+    Path(tempfile.gettempdir()) / "anomaly-network-model-artifacts"
+)
+FALLBACK_WARNING = (
+    "The fitted preprocessing pipeline is unavailable. Predictions are using "
+    "manual feature alignment and should not be treated as validated model performance."
+)
+LOGGER = logging.getLogger(__name__)
+
+
+class JsonFittedPreprocessor:
+    def __init__(self, payload: dict[str, Any]):
+        self.numeric_features = list(payload["numeric_features"])
+        self.categorical_features = list(payload["categorical_features"])
+        self.numeric_medians = np.asarray(payload["numeric_medians"], dtype=float)
+        self.numeric_centers = np.asarray(payload["numeric_centers"], dtype=float)
+        self.numeric_scales = np.asarray(payload["numeric_scales"], dtype=float)
+        self.categorical_imputations = list(payload["categorical_imputations"])
+        self.categories = [
+            [str(value) for value in values]
+            for values in payload["categories"]
+        ]
+        self.feature_names = list(payload["feature_names"])
+
+    def get_feature_names_out(self) -> np.ndarray:
+        return np.asarray(self.feature_names, dtype=object)
+
+    def transform(self, frame: pd.DataFrame) -> np.ndarray:
+        numeric = frame[self.numeric_features].apply(
+            pd.to_numeric,
+            errors="coerce",
+        )
+        numeric_array = numeric.to_numpy(dtype=float)
+        missing_mask = np.isnan(numeric_array)
+        numeric_array[missing_mask] = np.take(
+            self.numeric_medians,
+            np.where(missing_mask)[1],
+        )
+        safe_scales = np.where(self.numeric_scales == 0, 1.0, self.numeric_scales)
+        transformed_numeric = (
+            numeric_array - self.numeric_centers
+        ) / safe_scales
+
+        encoded_columns: list[np.ndarray] = []
+        for index, column in enumerate(self.categorical_features):
+            values = frame[column].astype(object)
+            values = values.where(values.notna(), self.categorical_imputations[index])
+            text_values = values.astype(str).to_numpy()
+            for category in self.categories[index]:
+                encoded_columns.append((text_values == category).astype(float))
+
+        encoded = (
+            np.column_stack(encoded_columns)
+            if encoded_columns
+            else np.empty((len(frame), 0), dtype=float)
+        )
+        return np.column_stack([transformed_numeric, encoded])
 
 SEED = 314159
 
@@ -310,6 +381,118 @@ def get_feature_columns() -> list[str]:
 
     raise FileNotFoundError(
         "feature_columns.json was not found in backend/ or backend/anomaly-model-artifacts/."
+    )
+
+
+def _get_s3_bucket() -> str | None:
+    value = os.getenv("MODEL_S3_BUCKET") or os.getenv("S3_MODEL_BUCKET")
+    return value.strip() if value and value.strip() else None
+
+
+def _get_s3_prefix() -> str:
+    return os.getenv("MODEL_S3_PREFIX", "model-artifacts/").strip().strip("/")
+
+
+def _get_preprocessor_s3_key() -> str:
+    configured = os.getenv("PREPROCESSING_PIPELINE_S3_KEY")
+    if configured and configured.strip():
+        return configured.strip().lstrip("/")
+    prefix = _get_s3_prefix()
+    return f"{prefix}/{PREPROCESSOR_FILENAME}" if prefix else PREPROCESSOR_FILENAME
+
+
+def _download_preprocessor_from_s3() -> Path | None:
+    bucket = _get_s3_bucket()
+    if not bucket:
+        return None
+
+    try:
+        import boto3
+        from botocore.exceptions import BotoCoreError, ClientError
+    except ImportError:
+        LOGGER.warning("boto3 is unavailable; fitted preprocessing cannot be downloaded.")
+        return None
+
+    key = _get_preprocessor_s3_key()
+    local_path = PREPROCESSOR_DOWNLOAD_DIR / key
+    if local_path.exists() and local_path.stat().st_size > 0:
+        return local_path
+
+    local_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        boto3.client("s3").download_file(bucket, key, str(local_path))
+    except ClientError as exc:
+        error_code = exc.response.get("Error", {}).get("Code")
+        if error_code in {"404", "NoSuchKey", "NotFound"}:
+            LOGGER.warning("Fitted preprocessing artifact was not found at s3://%s/%s", bucket, key)
+            return None
+        LOGGER.warning("Unable to download fitted preprocessing artifact: %s", exc)
+        return None
+    except (BotoCoreError, OSError) as exc:
+        LOGGER.warning("Unable to download fitted preprocessing artifact: %s", exc)
+        return None
+    return local_path
+
+
+def _resolve_preprocessor_path() -> Path | None:
+    downloaded = _download_preprocessor_from_s3()
+    if downloaded is not None:
+        return downloaded
+    return next((path for path in PREPROCESSOR_CANDIDATES if path.exists()), None)
+
+
+@lru_cache(maxsize=1)
+def load_fitted_preprocessor() -> tuple[Any | None, Path | None]:
+    path = _resolve_preprocessor_path()
+    if path is None:
+        LOGGER.error(FALLBACK_WARNING)
+        return None, None
+
+    try:
+        if path.suffix.lower() == ".json":
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            preprocessor = JsonFittedPreprocessor(payload)
+        else:
+            preprocessor = joblib.load(path)
+        learned_features = list(preprocessor.get_feature_names_out())
+    except Exception as exc:
+        LOGGER.exception("Unable to load fitted preprocessing artifact from %s", path)
+        if os.getenv("REQUIRE_FITTED_PREPROCESSOR", "false").lower() in {"1", "true", "yes"}:
+            raise RuntimeError(
+                f"Unable to load fitted preprocessing artifact: {type(exc).__name__}: {exc}"
+            ) from exc
+        return None, path
+
+    expected_features = get_feature_columns()
+    if learned_features != expected_features:
+        message = (
+            "Fitted preprocessing output does not match feature_columns.json; "
+            "classifier input order cannot be trusted."
+        )
+        if os.getenv("REQUIRE_FITTED_PREPROCESSOR", "false").lower() in {"1", "true", "yes"}:
+            raise RuntimeError(message)
+        LOGGER.error(message)
+        return None, path
+
+    LOGGER.info(
+        "Loaded fitted preprocessing pipeline from %s with %s output features",
+        path,
+        len(learned_features),
+    )
+    return preprocessor, path
+
+
+def get_preprocessing_status() -> PreprocessingStatus:
+    preprocessor, path = load_fitted_preprocessor()
+    if preprocessor is not None:
+        return PreprocessingStatus(
+            mode="fitted_pipeline",
+            artifact=path.name if path else PREPROCESSOR_FILENAME,
+        )
+    return PreprocessingStatus(
+        mode="manual_fallback",
+        artifact=path.name if path else None,
+        warning=FALLBACK_WARNING,
     )
 
 
@@ -738,7 +921,19 @@ def prepare_batch_input(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFram
     _validate_raw_network_input(raw_df)
     model_input_df, context_df = _canonical_model_input(raw_df)
 
-    processed_df = encode_features(model_input_df)
+    preprocessor, _ = load_fitted_preprocessor()
+    if preprocessor is None:
+        LOGGER.error(FALLBACK_WARNING)
+        processed_df = encode_features(model_input_df)
+        return processed_df, context_df
+
+    transformed = preprocessor.transform(model_input_df)
+    transformed_df = pd.DataFrame(
+        transformed,
+        columns=preprocessor.get_feature_names_out(),
+        index=model_input_df.index,
+    )
+    processed_df = align_features(transformed_df).astype(float)
     return processed_df, context_df
 
 

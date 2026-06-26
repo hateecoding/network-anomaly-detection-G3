@@ -54,6 +54,12 @@ class ModelPredictionResult(BaseModel):
     score: Optional[float] = None
 
 
+class PreprocessingStatus(BaseModel):
+    mode: Literal["fitted_pipeline", "manual_fallback"]
+    artifact: Optional[str] = None
+    warning: Optional[str] = None
+
+
 class PredictionResponse(BaseModel):
     prediction: int
     result: Literal["attack", "normal"]
@@ -66,6 +72,7 @@ class PredictionResponse(BaseModel):
     selection_metric: Optional[str] = None
     best_model_metrics: Optional[ModelPerformanceMetrics] = None
     model_results: dict[str, ModelPredictionResult] = Field(default_factory=dict)
+    preprocessing: PreprocessingStatus
 
 
 class RecentDetectionPoint(BaseModel):
@@ -217,6 +224,7 @@ class UploadAnalysisResponse(BaseModel):
     max_returned_records: int
     review_threshold: float
     attack_threshold: float
+    preprocessing: PreprocessingStatus
     chart_data: UploadChartData
     model_analysis: Optional[UploadModelAnalysis] = None
     alerts: list[AlertRecord] = Field(default_factory=list)

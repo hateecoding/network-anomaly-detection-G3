@@ -6,14 +6,14 @@ Status reflects the codebase after the safe fixes in this audit.
 
 | Requirement / issue from DOCX | Status | Evidence | What still needs fixing | Priority |
 | --- | --- | --- | --- | --- |
-| Complete fitted preprocessing pipeline | Not implemented | `Backend/services/preprocess.py`, `models/xgboost.pkl`, `models/random_forest.pkl` | Export the original fitted imputer, RobustScaler, OneHotEncoder, and classifier as a Pipeline. Do not refit in production. | Critical |
-| Fitted imputer deployed | Not implemented | No imputer/pipeline artifact exists | Supply the original fitted artifact from Assignment 2. | Critical |
-| Fitted RobustScaler deployed | Not implemented | `encode_features()` performs no scaling | Supply the original fitted scaler or full Pipeline. | Critical |
-| Fitted OneHotEncoder deployed | Not implemented | `encode_features()` uses `pandas.get_dummies()` | Supply the original fitted encoder or full Pipeline. | Critical |
+| Complete fitted preprocessing pipeline | Implemented | `Backend/preprocessing_pipeline.json`, `Backend/services/preprocess.py`, exporter metadata | Keep the artifact and App Runner environment synchronized; do not refit during requests. | Critical |
+| Fitted imputer deployed | Implemented | Artifact stores numeric medians and categorical most-frequent values | None. | Critical |
+| Fitted RobustScaler deployed | Implemented | Artifact stores fitted centers/scales; verified against sklearn output with zero numerical difference | None. | Critical |
+| Fitted OneHotEncoder deployed | Implemented | Artifact stores fitted categories and unknown values map to all-zero category vectors | None. | Critical |
 | Fixed model feature order | Implemented | `Backend/feature_columns.json`, `align_features()` | Keep this file packaged with any replacement Pipeline for diagnostics. | Critical |
-| Unknown categorical handling | Partially implemented | Normalization plus aligned dummy columns in `Backend/services/preprocess.py` | Verify behaviour against the original encoder's `handle_unknown` configuration. | Critical |
+| Unknown categorical handling | Implemented | Fitted artifact reproduces `OneHotEncoder(handle_unknown="ignore")` | None. | Critical |
 | XGBoost and Random Forest are standalone classifiers | Implemented/confirmed | Artifact inspection: `XGBClassifier` and `RandomForestClassifier`, both with 67 inputs and no pipeline steps | Replace with complete fitted pipelines. | Critical |
-| Production accuracy verified after preprocessing | Not implemented | `Backend/model_metrics.json` contains historical metrics only | Re-run labelled external evaluation after deploying the original Pipeline. Do not claim current production accuracy. | Critical |
+| Production accuracy verified after preprocessing | Partially implemented | Labelled held-out upload evaluation reproduces Random Forest metrics and XGBoost ROC-AUC | The original tuned XGBoost classification threshold is absent, so default-threshold XGBoost precision/F1 differ from archived values. | Critical |
 | Upload charts hidden before successful upload | Implemented | `Frontend/src/components/UploadLogsPage.tsx` uses `hasAnalysis` gating | None. | HD required |
 | Charts use uploaded data and prediction output | Implemented | Full-data backend aggregates in `Backend/services/upload_analysis.py`; preview-row charts in Upload Logs | Scatter plot is limited to the returned 1,000-row preview by design. | HD required |
 | Review recommended is not a model class | Implemented | `Backend/services/classification.py`; row fields `model_prediction` and `display_category` | Keep this distinction in report wording. | Critical |
@@ -28,7 +28,7 @@ Status reflects the codebase after the safe fixes in this audit.
 | Shared chart/table filtering | Partially implemented | Upload page protocol, category, probability and row-range filters update the table/scatter | Full-data aggregate charts do not all recompute from the capped preview. Server-side filtered aggregates would be needed. | HD required |
 | D3 only and locally installed | Implemented | `Frontend/package.json`, D3 imports in chart components, CDN removed from `index.html` | None. | HD required |
 | Confusion matrix heatmap | Implemented when labels exist | `D3HeatmapChart.tsx`, Upload Logs model analysis | Hidden correctly when ground-truth labels are absent. | HD required |
-| Manual form matches real harmonized features | Implemented | `SelfTestPage.tsx`, `utils/predict.ts`, `TrafficInput` | Production correctness still depends on the missing fitted preprocessing Pipeline. | Critical |
+| Manual form matches real harmonized features | Implemented | `SelfTestPage.tsx`, `utils/predict.ts`, `TrafficInput`, fitted preprocessing artifact | None. | Critical |
 | Manual form validation | Implemented | Required fields, ranges, inline errors, disabled submit; Pydantic constraints | Consider domain-specific upper limits for all count/byte fields. | Critical |
 | Upload validation | Partially implemented | Required aliases, numeric/non-negative checks, file size, row cap, empty/format errors | Categorical-value validation and a downloadable validation report for all invalid rows are not implemented. | Critical |
 | Upload template | Implemented | `exportCsvTemplate()` contains the 15 harmonized columns | None. | HD required |
@@ -67,11 +67,12 @@ Status reflects the codebase after the safe fixes in this audit.
 - Protected production error details and retained the debug endpoint gate.
 - Added backend preprocessing/classification regression tests.
 - Replaced the outdated notebook README with production setup, environment, endpoint, limitation, and verification documentation.
+- Exported and deployed the fitted Assignment 2 preprocessing parameters.
+- Added explicit preprocessing mode/warning metadata to prediction responses.
 
 # NOT FIXED / NEEDS DECISION
 
-- The original fitted preprocessing Pipeline is absent. This is the main blocker and cannot be safely reconstructed from the current classifiers.
-- Production accuracy is not verified. Historical metrics must not be presented as current deployed accuracy.
+- The original notebook and serialized tuned XGBoost decision threshold are absent. The recovered fitted preprocessing is verified, but the historical XGBoost threshold should not be guessed silently.
 - Real SHAP or feature-contribution explainability requires model evidence/artifacts.
 - Full-result export requires a backend export job or paginated endpoint because `/upload-log` intentionally returns only 1,000 rows.
 - Chart PNG export, animated transitions, protocol sorting, full detail modal, and full cross-chart recomputation remain incomplete.

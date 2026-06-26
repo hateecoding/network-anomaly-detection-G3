@@ -32,19 +32,32 @@ models/
 datasets/
 ```
 
-## Important Model Limitation
+## Production Preprocessing
 
-The repository currently contains standalone `XGBClassifier` and `RandomForestClassifier` artifacts. It does **not** contain the fitted Assignment 2 `SimpleImputer`, `RobustScaler`, or `OneHotEncoder` objects, and the classifiers are not saved inside a scikit-learn `Pipeline`.
+The backend deploys `Backend/preprocessing_pipeline.json`, a version-independent
+fitted preprocessing artifact recovered from the original Assignment 2 training
+recipe and split. It contains the learned:
 
-The backend currently:
+- numeric median imputations;
+- `RobustScaler` centers and scales;
+- categorical most-frequent imputations;
+- `OneHotEncoder` category order;
+- final 67-feature output order.
 
-1. maps raw aliases to 15 harmonized features;
-2. engineers totals and ratios where required;
-3. manually one-hot encodes categorical fields;
-4. aligns the result to `Backend/feature_columns.json`;
-5. sends the aligned 67-column matrix to each classifier.
+FastAPI applies this fitted artifact before XGBoost and Random Forest prediction.
+`Backend/feature_columns.json` verifies the output contract but is not used as a
+replacement for fitted preprocessing.
 
-This preserves column order but does not reproduce the original fitted scaling pipeline. Therefore, the metrics in `Backend/model_metrics.json` describe the original training evaluation and must not be presented as verified production inference accuracy. The correct production fix is to export the original fitted preprocessing pipeline from the training environment and deploy it without refitting.
+If the artifact cannot be loaded, the response reports
+`preprocessing.mode = "manual_fallback"` with a warning. Set
+`REQUIRE_FITTED_PREPROCESSOR=true` in production when fallback predictions must
+be rejected.
+
+The stored Random Forest test metrics are reproduced by the deployed pipeline.
+XGBoost reproduces the stored ROC-AUC, but the original tuned classification
+threshold was not preserved in the repository. Live upload metrics therefore use
+the classifier's default decision threshold and must not be replaced with the
+historical metrics from `model_metrics.json`.
 
 ## Backend Setup
 
@@ -78,6 +91,8 @@ Copy `Backend/.env.example` into your deployment configuration. App Runner reads
 | `MODEL_SERIALIZER` | `auto`, `pickle`, or `joblib` |
 | `XGBOOST_MODEL_S3_KEY` | Optional exact XGBoost object key |
 | `RANDOM_FOREST_MODEL_S3_KEY` | Optional exact Random Forest object key |
+| `PREPROCESSING_PIPELINE_S3_KEY` | Optional exact fitted preprocessing artifact key |
+| `REQUIRE_FITTED_PREPROCESSOR` | Reject loading failures instead of allowing the reported fallback |
 | `MODEL_METRICS_S3_KEY` | Optional exact metrics object key |
 | `ENABLE_DEBUG_ENDPOINTS` | Keep `false` in production |
 

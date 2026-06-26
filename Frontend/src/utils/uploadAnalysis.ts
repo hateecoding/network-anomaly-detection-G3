@@ -81,6 +81,9 @@ export type UploadAnalysisMetadata = {
   previewCapped: boolean;
   reviewThreshold: number;
   attackThreshold: number;
+  preprocessingMode: "fitted_pipeline" | "manual_fallback";
+  preprocessingArtifact: string | null;
+  preprocessingWarning: string | null;
 };
 
 export type UploadModelAnalysisItem = {
@@ -157,6 +160,11 @@ type BackendUploadResponse = {
   max_returned_records: number;
   review_threshold: number;
   attack_threshold: number;
+  preprocessing: {
+    mode: "fitted_pipeline" | "manual_fallback";
+    artifact?: string | null;
+    warning?: string | null;
+  };
   chart_data: {
     trend: {
       label: string;
@@ -484,6 +492,9 @@ function mapUploadAnalysis(response: BackendUploadResponse): UploadAnalysisResul
       previewCapped: response.records_truncated,
       reviewThreshold: response.review_threshold,
       attackThreshold: response.attack_threshold,
+      preprocessingMode: response.preprocessing?.mode ?? "manual_fallback",
+      preprocessingArtifact: response.preprocessing?.artifact ?? null,
+      preprocessingWarning: response.preprocessing?.warning ?? null,
     },
     modelAnalysis: mapModelAnalysis(response.model_analysis),
   };

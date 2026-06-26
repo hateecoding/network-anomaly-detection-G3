@@ -24,7 +24,7 @@ from schemas import (
     PredictionResponse,
     TrafficInput,
 )
-from services.preprocess import prepare_single_record
+from services.preprocess import get_preprocessing_status, prepare_single_record
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = BASE_DIR.parent
@@ -137,6 +137,7 @@ def build_prediction_response(
         selection_metric=selection_metric,
         best_model_metrics=best_model_metrics,
         model_results=model_results,
+        preprocessing=get_preprocessing_status(),
     )
 
 
@@ -349,6 +350,7 @@ def get_model_artifact_debug_info() -> dict[str, Any]:
                 env_var="MODEL_METRICS_S3_KEY",
             ),
         },
+        "preprocessing": get_preprocessing_status().model_dump(),
     }
 
 

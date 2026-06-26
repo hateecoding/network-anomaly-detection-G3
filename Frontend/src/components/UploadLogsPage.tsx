@@ -36,6 +36,7 @@ import { StatusBadge } from "./StatusBadge";
 import { UploadBox } from "./UploadBox";
 
 const pageSizeOptions = [25, 50, 100] as const;
+const EXPLANATION_PANEL_STORAGE_KEY = "aegis-net.upload-explanation-expanded";
 type FilterOption = "all" | "attack" | "review" | "normal";
 type SortOption = "priority" | "record" | "confidence" | "attackProbability";
 
@@ -77,6 +78,9 @@ export function UploadLogsPage({
   const [rowEnd, setRowEnd] = useState(cachedAnalysis?.metadata.totalRecords ?? 1);
   const [selectedRow, setSelectedRow] = useState<number | null>(
     cachedAnalysis?.rows[0]?.recordNumber ?? null,
+  );
+  const [explanationExpanded, setExplanationExpanded] = useState(() =>
+    loadExplanationPreference(Boolean(cachedAnalysis?.rows[0])),
   );
   const [xFeature, setXFeature] = useState<ScatterFeature>("totalBytes");
   const [yFeature, setYFeature] = useState<ScatterFeature>("duration");
@@ -130,6 +134,11 @@ export function UploadLogsPage({
   const pageStart = (safePage - 1) * pageSize;
   const paginatedRows = filteredRows.slice(pageStart, pageStart + pageSize);
 
+  const selectRow = (recordNumber: number) => {
+    setSelectedRow(recordNumber);
+    setExplanationExpanded(true);
+  };
+
   const columns: DataColumn<UploadAnalysisRow>[] = [
     { key: "rowId", header: "Row", render: (row) => <strong>{row.rowId}</strong> },
     { key: "protocol", header: "Protocol", render: (row) => row.protocol },
@@ -156,7 +165,7 @@ export function UploadLogsPage({
       render: (row) => (
         <button type="button" className="table-action-button" onClick={(event) => {
           event.stopPropagation();
-          setSelectedRow(row.recordNumber);
+          selectRow(row.recordNumber);
         }}>
           {row.prediction === "Normal" ? "View details" : "Review record"}
         </button>
@@ -178,6 +187,10 @@ export function UploadLogsPage({
     rows.length,
     sort,
   ]);
+
+  useEffect(() => {
+    saveExplanationPreference(explanationExpanded);
+  }, [explanationExpanded]);
 
   useEffect(() => {
     if (analysis) {
@@ -225,6 +238,9 @@ export function UploadLogsPage({
       setRows(result.rows);
       setAlerts(result.alerts);
       setSelectedRow(result.rows[0]?.recordNumber ?? null);
+      if (result.rows.length > 0) {
+        setExplanationExpanded(true);
+      }
       setRowStart(1);
       setRowEnd(result.metadata.totalRecords);
       setProbabilityMin(0);
@@ -309,7 +325,7 @@ export function UploadLogsPage({
 
   return (
     <div className="upload-dashboard-page">
-      <div className="upload-investigation-layout">
+      <div className={`upload-investigation-layout ${explanationExpanded ? "" : "upload-investigation-layout-explanation-collapsed"}`}>
         <div className="upload-investigation-main">
           <section className="panel upload-command-card">
             <div className="upload-command-main">
@@ -364,6 +380,11 @@ export function UploadLogsPage({
                 <span>i</span>
                 Review recommended is probability-based and is not a third model class.
               </div>
+              {analysis.metadata.preprocessingMode === "manual_fallback" ? (
+                <div className="preprocessing-warning" role="status">
+                  {analysis.metadata.preprocessingWarning}
+                </div>
+              ) : null}
 
               <section className="panel upload-filter-toolbar">
                 <label className="compact-filter-control">
@@ -471,7 +492,7 @@ export function UploadLogsPage({
                       <label>X-axis<select value={xFeature} onChange={(event) => setXFeature(event.target.value as ScatterFeature)}>{Object.entries(scatterFeatureLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
                       <label>Y-axis<select value={yFeature} onChange={(event) => setYFeature(event.target.value as ScatterFeature)}>{Object.entries(scatterFeatureLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
                     </div>
-                    <D3ScatterPlot rows={filteredRows} xFeature={xFeature} yFeature={yFeature} selectedRow={selectedRow} onSelectRow={setSelectedRow} />
+                    <D3ScatterPlot rows={filteredRows} xFeature={xFeature} yFeature={yFeature} selectedRow={selectedRow} onSelectRow={selectRow} />
                   </Panel>
                   </div>
                   <div id="upload-protocol-risk" className="upload-chart-cell">
@@ -512,7 +533,7 @@ export function UploadLogsPage({
                       columns={columns}
                       rows={paginatedRows}
                       rowKey={(row) => row.rowId}
-                      onRowClick={(row) => setSelectedRow(row.recordNumber)}
+                      onRowClick={(row) => selectRow(row.recordNumber)}
                       rowClassName={(row) => [
                         row.prediction === "Review Recommended" ? "table-row-suspicious" : row.prediction === "Attack" ? "table-row-attack" : "",
                         row.recordNumber === selectedRow ? "table-row-selected" : "",
@@ -531,7 +552,7 @@ export function UploadLogsPage({
                 <Panel title="Highest-risk preview records" subtitle="Fast access to rows requiring attention.">
                   <div className="risky-record-list">
                     {sortRows(rows, "attackProbability").slice(0, 5).map((row) => (
-                      <button key={row.rowId} type="button" className="risky-record-item" onClick={() => setSelectedRow(row.recordNumber)}>
+                      <button key={row.rowId} type="button" className="risky-record-item" onClick={() => selectRow(row.recordNumber)}>
                         <span className={`risk-dot risk-dot-${row.prediction === "Attack" ? "attack" : row.prediction === "Review Recommended" ? "review" : "normal"}`} />
                         <span><strong>{row.rowId}</strong><small>{row.protocol} · {row.service.toUpperCase()}</small></span>
                         <span><strong>{row.attackProbability}%</strong><small>{row.prediction}</small></span>
@@ -569,19 +590,50 @@ export function UploadLogsPage({
           ) : null}
         </div>
 
-        <aside id="upload-explanation" className="upload-explanation-rail">
-          <ExplanationPanel row={selectedRecord} />
+        <aside id="upload-explanation" className={`upload-explanation-rail ${explanationExpanded ? "" : "upload-explanation-rail-collapsed"}`}>
+          <ExplanationPanel
+            row={selectedRecord}
+            expanded={explanationExpanded}
+            onToggle={() => setExplanationExpanded((current) => !current)}
+          />
         </aside>
       </div>
     </div>
   );
 }
 
-function ExplanationPanel({ row }: { row: UploadAnalysisRow | null }) {
+function ExplanationPanel({
+  row,
+  expanded,
+  onToggle,
+}: {
+  row: UploadAnalysisRow | null;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  if (!expanded) {
+    return (
+      <section className="panel explanation-panel explanation-panel-collapsed">
+        <button
+          type="button"
+          className="explanation-toggle-button explanation-expand-button"
+          aria-label="Expand prediction explanation"
+          onClick={onToggle}
+        >
+          ‹
+        </button>
+        <span>Prediction explanation</span>
+      </section>
+    );
+  }
+
   if (!row) {
     return (
       <section className="panel explanation-panel">
-        <p className="eyebrow">Prediction explanation</p>
+        <div className="explanation-panel-heading">
+          <p className="eyebrow">Prediction explanation</p>
+          <button type="button" className="explanation-toggle-button" aria-label="Collapse prediction explanation" onClick={onToggle}>›</button>
+        </div>
         <h3>No row selected</h3>
         <p className="chart-note">Select a chart point or table row to inspect its model output and traffic context.</p>
       </section>
@@ -601,7 +653,10 @@ function ExplanationPanel({ row }: { row: UploadAnalysisRow | null }) {
           <p className="eyebrow">Prediction explanation</p>
           <h3>{row.rowId}</h3>
         </div>
-        <StatusBadge label={row.prediction} tone={row.prediction === "Attack" ? "attack" : row.prediction === "Review Recommended" ? "suspicious" : "normal"} />
+        <div className="explanation-heading-actions">
+          <StatusBadge label={row.prediction} tone={row.prediction === "Attack" ? "attack" : row.prediction === "Review Recommended" ? "suspicious" : "normal"} />
+          <button type="button" className="explanation-toggle-button" aria-label="Collapse prediction explanation" onClick={onToggle}>›</button>
+        </div>
       </div>
 
       <div className="explanation-metrics">
@@ -722,4 +777,26 @@ function formatShare(value: number, total: number) {
 function clamp(value: number, minimum: number, maximum: number) {
   if (!Number.isFinite(value)) return minimum;
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+function loadExplanationPreference(defaultValue: boolean) {
+  try {
+    const savedPreference = window.localStorage.getItem(
+      EXPLANATION_PANEL_STORAGE_KEY,
+    );
+    return savedPreference === null ? defaultValue : savedPreference === "true";
+  } catch {
+    return defaultValue;
+  }
+}
+
+function saveExplanationPreference(expanded: boolean) {
+  try {
+    window.localStorage.setItem(
+      EXPLANATION_PANEL_STORAGE_KEY,
+      String(expanded),
+    );
+  } catch {
+    // Storage can be unavailable in private or restricted browser contexts.
+  }
 }

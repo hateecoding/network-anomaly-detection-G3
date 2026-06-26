@@ -1853,12 +1853,21 @@ button {
   gap: 8px;
 }
 
+.upload-dashboard-page .upload-investigation-layout-explanation-collapsed {
+  grid-template-columns: minmax(0, 1fr) 38px;
+}
+
 .upload-dashboard-page .upload-investigation-main {
   gap: 8px;
 }
 
 .upload-dashboard-page .upload-explanation-rail {
   top: 8px;
+  transition: width 180ms ease;
+}
+
+.upload-dashboard-page .upload-explanation-rail-collapsed {
+  width: 38px;
 }
 
 .upload-dashboard-page .upload-command-card {
@@ -2076,6 +2085,15 @@ button {
 .upload-dashboard-page .review-class-note > span {
   width: 14px;
   height: 14px;
+}
+
+.preprocessing-warning {
+  padding: 7px 9px;
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  border-radius: 7px;
+  color: #fed7aa;
+  background: rgba(249, 115, 22, 0.08);
+  font-size: 0.64rem;
 }
 
 .upload-dashboard-page .upload-filter-toolbar {
@@ -2364,6 +2382,53 @@ button {
   border-radius: 9px;
 }
 
+.explanation-panel-collapsed {
+  display: flex !important;
+  min-height: 640px !important;
+  padding: 7px !important;
+  align-items: center !important;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+.explanation-panel-collapsed > span {
+  color: var(--muted);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+
+.explanation-toggle-button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.explanation-toggle-button:hover {
+  color: var(--text);
+  border-color: rgba(96, 165, 250, 0.35);
+  background: rgba(96, 165, 250, 0.08);
+}
+
+.explanation-expand-button {
+  margin-bottom: 10px;
+}
+
+.explanation-heading-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
 .upload-dashboard-page .explanation-panel-heading h3 {
   font-size: 0.82rem;
 }
@@ -2624,12 +2689,34 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .upload-dashboard-page .upload-investigation-layout-explanation-collapsed {
+    grid-template-columns: 1fr;
+  }
+
   .upload-dashboard-page .upload-explanation-rail {
     position: static;
   }
 
   .upload-dashboard-page .explanation-panel {
     min-height: 0;
+  }
+
+  .upload-dashboard-page .upload-explanation-rail-collapsed {
+    width: 100%;
+  }
+
+  .upload-dashboard-page .explanation-panel-collapsed {
+    min-height: 42px !important;
+    flex-direction: row;
+  }
+
+  .upload-dashboard-page .explanation-panel-collapsed > span {
+    writing-mode: horizontal-tb;
+    transform: none;
+  }
+
+  .upload-dashboard-page .explanation-expand-button {
+    margin: 0;
   }
 
   .upload-dashboard-page .upload-command-card {

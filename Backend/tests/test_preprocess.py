@@ -9,7 +9,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from services.classification import get_display_category
-from services.preprocess import prepare_batch_input
+from services.preprocess import get_preprocessing_status, prepare_batch_input
 
 
 class ClassificationTests(unittest.TestCase):
@@ -23,6 +23,13 @@ class ClassificationTests(unittest.TestCase):
 
 
 class PreprocessValidationTests(unittest.TestCase):
+    def test_fitted_preprocessing_artifact_is_active(self):
+        status = get_preprocessing_status()
+
+        self.assertEqual(status.mode, "fitted_pipeline")
+        self.assertEqual(status.artifact, "preprocessing_pipeline.json")
+        self.assertIsNone(status.warning)
+
     def test_supported_aliases_align_to_feature_columns(self):
         frame = pd.DataFrame(
             [
