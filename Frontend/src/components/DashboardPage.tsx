@@ -46,11 +46,11 @@ export function DashboardPage({
         setBackendData(data);
         setStatus({
           type: "success",
-          message: data.metrics.some((metric) => metric.value !== "0" && metric.value !== "0.00%")
-            ? "Backend summary refreshed successfully."
-            : "No backend activity recorded yet.",
+          message: data.sourceMessage,
         });
-        onSyncSuccess();
+        if (data.source === "backend") {
+          onSyncSuccess(data.sourceTimestamp ? new Date(data.sourceTimestamp) : undefined);
+        }
       } catch {
         if (!active) {
           return;
@@ -84,6 +84,9 @@ export function DashboardPage({
   const flaggedCount = distribution
     .filter((segment) => segment.label !== "Normal")
     .reduce((total, segment) => total + segment.value, 0);
+  const sourceNotice = backendData?.source === "cache"
+    ? "Showing latest locally cached upload analysis."
+    : null;
 
   return (
     <div className="page-grid">
@@ -92,6 +95,7 @@ export function DashboardPage({
           <p className="eyebrow">AI Security Operations</p>
           <h3>Security overview</h3>
           <p className={`hero-note-copy inline-message-${status.type}`}>{status.message}</p>
+          {sourceNotice ? <p className="inline-meta">{sourceNotice}</p> : null}
         </div>
       </div>
 

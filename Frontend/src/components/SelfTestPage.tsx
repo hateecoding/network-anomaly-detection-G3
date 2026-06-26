@@ -125,6 +125,18 @@ export function SelfTestPage({
   const statusTone = status.type === "idle" ? "info" : status.type;
 
   useEffect(() => {
+    if (isBlankInput(input)) {
+      setInput(initialInput);
+      setTouched({});
+      setSubmitted(false);
+      setStatus({
+        type: "idle",
+        message: "Sample normal traffic is loaded. Click Predict to call the live backend.",
+      });
+    }
+  }, []);
+
+  useEffect(() => {
     let active = true;
     let requestInFlight = false;
 
@@ -342,6 +354,12 @@ function shouldShowError(
   submitted: boolean,
 ) {
   return submitted || Boolean(touched[field]);
+}
+
+function isBlankInput(input: PredictionFormInput) {
+  return numericFields.every((field) => input[field].trim() === "") &&
+    !input.serviceDetail.trim() &&
+    !input.connectionDetail.trim();
 }
 
 function toPredictionInput(input: PredictionFormInput): PredictionInput {

@@ -4,6 +4,7 @@ import type {
   SummaryMetric,
 } from "../data/presentationData";
 import { requestJson } from "./api";
+import { loadCachedUploadAnalysis, type UploadAnalysisResult } from "./uploadAnalysis";
 
 type BackendDashboardSummary = {
   total_records: number;
@@ -45,6 +46,9 @@ type BackendAlertsResponse = {
 };
 
 export type DashboardBackendData = {
+  source: "backend" | "cache" | "empty";
+  sourceMessage: string;
+  sourceTimestamp: string | null;
   metrics: SummaryMetric[];
   visitorMetrics: SummaryMetric[];
   distribution: { label: string; value: number; tone: "info" | "suspicious" | "attack"; color: string }[];
@@ -74,13 +78,57 @@ type BackendTopRoutesResponse = {
 };
 
 export async function fetchDashboardBackendData(): Promise<DashboardBackendData> {
-  const [summary, alerts, routes] = await Promise.all([
-    requestJson<BackendDashboardSummary>("/dashboard-summary"),
-    requestJson<BackendAlertsResponse>("/alerts?limit=4"),
-    requestJson<BackendTopRoutesResponse>("/top-routes?limit=5"),
-  ]);
+  const cachedAnalysis = loadCachedUploadAnalysis();
+
+  try {
+    const [summary, alerts, routes] = await Promise.all([
+      requestJson<BackendDashboardSummary>("/dashboard-summary"),
+      requestJson<BackendAlertsResponse>("/alerts?limit=4"),
+      requestJson<BackendTopRoutesResponse>("/top-routes?limit=5"),
+    ]);
+
+    const backendData = mapBackendDashboardData(summary, alerts, routes);
+    if (!hasUploadActivity(backendData) && cachedAnalysis) {
+      return mergeCachedUploadWithBackend(cachedAnalysis, backendData);
+    }
+
+    return backendData;
+  } catch (error) {
+    if (cachedAnalysis) {
+      return mapCachedUploadDashboardData(cachedAnalysis);
+    }
+    throw error;
+  }
+}
+
+function mapBackendDashboardData(
+  summary: BackendDashboardSummary,
+  alerts: BackendAlertsResponse,
+  routes: BackendTopRoutesResponse,
+): DashboardBackendData {
+  if (!hasBackendSummaryActivity(summary)) {
+    return {
+      source: "empty",
+      sourceMessage: "No analysis recorded yet.",
+      sourceTimestamp: null,
+      metrics: [],
+      visitorMetrics: buildVisitorMetrics(summary),
+      distribution: [],
+      detectionTrend: [],
+      alerts: [],
+      topRoutes: mapTopRoutes(routes),
+      latestSelfTest: mapLatestSelfTest(summary),
+    };
+  }
 
   return {
+    source: hasBackendSummaryActivity(summary) ? "backend" : "empty",
+    sourceMessage: hasBackendSummaryActivity(summary)
+      ? `Last sync: ${formatDateTime(new Date().toISOString())}`
+      : "No analysis recorded yet.",
+    sourceTimestamp: hasBackendSummaryActivity(summary)
+      ? new Date().toISOString()
+      : null,
     metrics: [
       {
         label: "Uploaded Records",
@@ -113,20 +161,7 @@ export async function fetchDashboardBackendData(): Promise<DashboardBackendData>
         tone: "attack",
       },
     ],
-    visitorMetrics: [
-      {
-        label: "Active Visitors",
-        value: summary.active_visitors.toLocaleString(),
-        helper: "Website visitors seen in the active window",
-        tone: "info",
-      },
-      {
-        label: "Flagged Visitors",
-        value: summary.suspicious_visitors.toLocaleString(),
-        helper: "Visitors breaching monitoring thresholds",
-        tone: "suspicious",
-      },
-    ],
+    visitorMetrics: buildVisitorMetrics(summary),
     distribution: [
       {
         label: "Normal",
@@ -167,24 +202,164 @@ export async function fetchDashboardBackendData(): Promise<DashboardBackendData>
       timestamp: formatDateTime(alert.created_at),
       detail: alert.message,
     })),
-    topRoutes: routes.items.map((route) => ({
-      route: route.route,
-      totalHits: route.request_count,
-      suspiciousHits: route.suspicious_count,
-      tone: route.suspicious_count >= 10 ? "attack" : route.suspicious_count > 0 ? "suspicious" : "info",
+    topRoutes: mapTopRoutes(routes),
+    latestSelfTest: mapLatestSelfTest(summary),
+  };
+}
+
+function mergeCachedUploadWithBackend(
+  cachedAnalysis: UploadAnalysisResult,
+  backendData: DashboardBackendData,
+): DashboardBackendData {
+  const cachedData = mapCachedUploadDashboardData(cachedAnalysis);
+  return {
+    ...cachedData,
+    visitorMetrics: backendData.visitorMetrics,
+    topRoutes: backendData.topRoutes,
+    latestSelfTest: backendData.latestSelfTest,
+    alerts: backendData.alerts.length > 0 ? backendData.alerts : cachedData.alerts,
+  };
+}
+
+function mapCachedUploadDashboardData(
+  analysis: UploadAnalysisResult,
+): DashboardBackendData {
+  const { summary } = analysis;
+  return {
+    source: "cache",
+    sourceMessage: `Restored from local cache: ${formatDateTime(summary.updatedAt)}`,
+    sourceTimestamp: summary.updatedAt,
+    metrics: [
+      {
+        label: "Uploaded Records",
+        value: summary.totalRecords.toLocaleString(),
+        helper: `Latest cached analysis: ${summary.filename}`,
+        tone: "info",
+      },
+      {
+        label: "Review Recommended",
+        value: summary.suspiciousRecords.toLocaleString(),
+        helper: "Rows requiring analyst review",
+        tone: "suspicious",
+      },
+      {
+        label: "Attack Records",
+        value: summary.attackRecords.toLocaleString(),
+        helper: "Rows classified as attack traffic",
+        tone: "attack",
+      },
+      {
+        label: "Normal Records",
+        value: summary.normalRecords.toLocaleString(),
+        helper: "Rows classified as normal traffic",
+        tone: "normal",
+      },
+      {
+        label: "Attack Percentage",
+        value: `${summary.attackPercentage.toFixed(2)}%`,
+        helper: "Flagged share in cached upload",
+        tone: "attack",
+      },
+    ],
+    visitorMetrics: [],
+    distribution: analysis.charts.composition.map((segment) => ({
+      label: segment.label,
+      value: segment.value,
+      tone: segment.label === "Attack" ? "attack" : segment.label === "Review Recommended" ? "suspicious" : "info",
+      color: segment.color,
     })),
-    latestSelfTest: summary.latest_self_test_result
-      ? {
-          label: summary.latest_self_test_result.result === "attack" ? "Attack" : "Normal",
-          confidence: Math.round(clamp(summary.latest_self_test_result.confidence, 0, 1) * 100),
-          score: Math.round(clamp(summary.latest_self_test_result.attack_probability, 0, 1) * 100),
-          interpretation:
-            summary.latest_self_test_result.result === "attack"
-              ? "The latest prediction flagged the traffic pattern for security review."
-              : "The latest prediction classified the traffic pattern as normal.",
-          testedAt: formatDateTime(summary.latest_self_test_result.timestamp),
-        }
-      : null,
+    detectionTrend: analysis.charts.trend.map((point) => ({
+      label: point.label,
+      normal: point.normal,
+      suspicious: point.reviewRecommended,
+      attack: point.attack,
+    })),
+    alerts: buildCachedAlerts(analysis),
+    topRoutes: [],
+    latestSelfTest: null,
+  };
+}
+
+function buildCachedAlerts(analysis: UploadAnalysisResult): AlertRecord[] {
+  if (analysis.alerts.length > 0) {
+    return analysis.alerts.slice(0, 4);
+  }
+
+  return analysis.rows
+    .filter((row) => row.prediction !== "Normal")
+    .slice(0, 4)
+    .map((row) => ({
+      id: row.rowId,
+      title: row.prediction === "Attack" ? "Attack detected" : "Review recommended",
+      severity: row.prediction === "Attack" ? "attack" : "suspicious",
+      source: row.sourceIp || "Network source",
+      route: row.service || "/upload-log",
+      timestamp: formatDateTime(analysis.summary.updatedAt),
+      detail: `${row.rowId} ${row.prediction.toLowerCase()} with ${row.attackProbability}% attack probability.`,
+    }));
+}
+
+function hasUploadActivity(data: DashboardBackendData) {
+  return data.distribution.some((segment) => segment.value > 0);
+}
+
+function hasBackendSummaryActivity(summary: BackendDashboardSummary) {
+  return (
+    summary.total_records > 0 ||
+    summary.total_review_recommended > 0 ||
+    summary.total_attacks > 0 ||
+    summary.total_normal > 0
+  );
+}
+
+function buildVisitorMetrics(summary: BackendDashboardSummary): SummaryMetric[] {
+  if (
+    summary.active_visitors === 0 &&
+    summary.suspicious_visitors === 0 &&
+    summary.total_requests_last_5_minutes === 0
+  ) {
+    return [];
+  }
+
+  return [
+    {
+      label: "Active Visitors",
+      value: summary.active_visitors.toLocaleString(),
+      helper: "Website visitors seen in the active window",
+      tone: "info",
+    },
+    {
+      label: "Flagged Visitors",
+      value: summary.suspicious_visitors.toLocaleString(),
+      helper: "Visitors breaching monitoring thresholds",
+      tone: "suspicious",
+    },
+  ];
+}
+
+function mapTopRoutes(routes: BackendTopRoutesResponse): DashboardBackendData["topRoutes"] {
+  return routes.items.map((route) => ({
+    route: route.route,
+    totalHits: route.request_count,
+    suspiciousHits: route.suspicious_count,
+    tone: route.suspicious_count >= 10 ? "attack" : route.suspicious_count > 0 ? "suspicious" : "info",
+  }));
+}
+
+function mapLatestSelfTest(
+  summary: BackendDashboardSummary,
+): DashboardBackendData["latestSelfTest"] {
+  if (!summary.latest_self_test_result) return null;
+
+  return {
+    label: summary.latest_self_test_result.result === "attack" ? "Attack" : "Normal",
+    confidence: Math.round(clamp(summary.latest_self_test_result.confidence, 0, 1) * 100),
+    score: Math.round(clamp(summary.latest_self_test_result.attack_probability, 0, 1) * 100),
+    interpretation:
+      summary.latest_self_test_result.result === "attack"
+        ? "The latest prediction flagged the traffic pattern for security review."
+        : "The latest prediction classified the traffic pattern as normal.",
+    testedAt: formatDateTime(summary.latest_self_test_result.timestamp),
   };
 }
 
