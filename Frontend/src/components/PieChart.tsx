@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as d3 from "d3";
 import {
-  exportSvgAsPng,
+  exportChartCardAsPng,
   hideChartTooltip,
   moveChartTooltip,
   showChartTooltip,
@@ -122,7 +122,8 @@ export function PieChart({
         <button
           type="button"
           className="chart-action-button"
-          onClick={() => exportSvgAsPng(ref.current, "prediction-distribution.png")}
+          data-export-hidden="true"
+          onClick={(event) => exportChartCardAsPng(event.currentTarget, "prediction-distribution.png")}
         >
           Export PNG
         </button>

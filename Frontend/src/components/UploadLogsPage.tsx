@@ -1,6 +1,8 @@
 import { useDeferredValue, useEffect, useState } from "react";
-import type { AlertRecord, UploadAnalysisRow } from "../data/presentationData";
+import type { ReactNode } from "react";
+import type { UploadAnalysisRow } from "../data/presentationData";
 import { checkBackendHealth } from "../utils/api";
+import { exportChartCardAsPng } from "../utils/d3ChartUtils";
 import { STANDARD_SYNC_INTERVAL_MS, type SyncCallbacks } from "../utils/sync";
 import {
   analyzeUploadedFile,
@@ -15,7 +17,6 @@ import {
   type UploadAnalysisResult,
   type UploadModelAnalysisItem,
 } from "../utils/uploadAnalysis";
-import { AlertList } from "./AlertList";
 import { D3HeatmapChart } from "./D3HeatmapChart";
 import { D3ProbabilityHistogram } from "./D3ProbabilityHistogram";
 import { D3ProtocolRiskChart } from "./D3ProtocolRiskChart";
@@ -65,7 +66,6 @@ export function UploadLogsPage({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState<UploadAnalysisResult | null>(cachedAnalysis);
   const [rows, setRows] = useState<UploadAnalysisRow[]>(cachedAnalysis?.rows ?? []);
-  const [alerts, setAlerts] = useState<AlertRecord[]>(cachedAnalysis?.alerts ?? []);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterOption>("all");
   const [sort, setSort] = useState<SortOption>("priority");
@@ -98,10 +98,9 @@ export function UploadLogsPage({
   const deferredQuery = useDeferredValue(query);
   const hasAnalysis = analysis !== null;
   const selectedRecord = rows.find((row) => row.recordNumber === selectedRow) ?? null;
-  const selectedModelAnalysis =
-    analysis?.modelAnalysis.models.find((model) => model.modelName === analysis.modelAnalysis.bestModel) ??
-    analysis?.modelAnalysis.models[0] ??
-    null;
+  const estimatedAverageAttackProbability = analysis
+    ? estimateAverageProbability(analysis.charts.probabilityBuckets)
+    : 0;
   const uniqueProtocols = [...new Set(rows.map((row) => row.protocol))].sort();
   const restoredCacheActive = hasAnalysis && !selectedFile && state.type === "success";
 
@@ -236,7 +235,6 @@ export function UploadLogsPage({
       const result = await analyzeUploadedFile(selectedFile);
       setAnalysis(result);
       setRows(result.rows);
-      setAlerts(result.alerts);
       setSelectedRow(result.rows[0]?.recordNumber ?? null);
       if (result.rows.length > 0) {
         setExplanationExpanded(true);
@@ -269,7 +267,6 @@ export function UploadLogsPage({
     clearCachedUploadAnalysis();
     setAnalysis(null);
     setRows([]);
-    setAlerts([]);
     setSelectedRow(null);
     setSelectedFile(null);
     resetFilters(1);
@@ -380,7 +377,8 @@ export function UploadLogsPage({
                 <KpiCard label="Normal" value={analysis.summary.normalRecords.toLocaleString()} helper={formatShare(analysis.summary.normalRecords, analysis.summary.totalRecords)} tone="normal" icon="✓" />
                 <KpiCard label="Review recommended" value={analysis.summary.suspiciousRecords.toLocaleString()} helper={formatShare(analysis.summary.suspiciousRecords, analysis.summary.totalRecords)} tone="suspicious" icon="◉" />
                 <KpiCard label="Attack detected" value={analysis.summary.attackRecords.toLocaleString()} helper={formatShare(analysis.summary.attackRecords, analysis.summary.totalRecords)} tone="attack" icon="!" />
-                <KpiCard label="Model used" value={formatModelName(analysis.modelAnalysis.bestModel)} helper={`${formatModelMetric(selectedModelAnalysis?.averageConfidence)} avg confidence`} tone="model" icon="AI" />
+                <KpiCard label="Avg attack probability" value={`${estimatedAverageAttackProbability}%`} helper="Estimated from all probability buckets" tone="suspicious" icon="%" />
+                <KpiCard label="Model used" value={formatModelName(analysis.modelAnalysis.bestModel)} helper="Primary deployed classifier" tone="model" icon="AI" />
               </section>
 
               <div className="review-class-note">
@@ -469,54 +467,95 @@ export function UploadLogsPage({
                 </nav>
                 <div className="upload-chart-grid upload-chart-grid-primary">
                   <div id="upload-overview" className="upload-chart-cell">
-                  <Panel title="A. Prediction distribution" subtitle="Normal, review, and attack composition.">
-                    <D3PieChart
-                      segments={analysis.charts.composition}
-                      centerLabel="Total"
-                      centerValue={analysis.summary.totalRecords.toLocaleString()}
-                      selectedLabel={filter === "attack" ? "Attack" : filter === "review" ? "Review Recommended" : filter === "normal" ? "Normal" : null}
-                      onSelect={selectCategory}
-                    />
-                  </Panel>
+                    <ChartInsightCard
+                      title="A. Prediction distribution"
+                      subtitle="Normal, review, and attack composition."
+                      question="Which traffic category dominates this upload?"
+                      meaning="This chart separates the uploaded traffic into model-normal rows, probability-based review rows, and attack rows."
+                      insight={`${analysis.summary.normalRecords.toLocaleString()} normal, ${analysis.summary.suspiciousRecords.toLocaleString()} review recommended, and ${analysis.summary.attackRecords.toLocaleString()} attack rows.`}
+                      interaction="Hover for counts. Click a slice to filter the table and every linked chart."
+                      filename="prediction-distribution.png"
+                    >
+                      <D3PieChart
+                        segments={analysis.charts.composition}
+                        centerLabel="Total"
+                        centerValue={analysis.summary.totalRecords.toLocaleString()}
+                        selectedLabel={filter === "attack" ? "Attack" : filter === "review" ? "Review Recommended" : filter === "normal" ? "Normal" : null}
+                        onSelect={selectCategory}
+                      />
+                    </ChartInsightCard>
                   </div>
                   <div id="upload-risk-trend" className="upload-chart-cell">
-                  <Panel title="B. Grouped anomaly-risk trend" subtitle="Average and maximum probability with attack concentration.">
-                    <D3RiskTrendChart
-                      data={analysis.charts.trend}
-                      reviewThreshold={analysis.metadata.reviewThreshold}
-                      attackThreshold={analysis.metadata.attackThreshold}
-                      selectedRange={analysis.charts.trend.find((point) => point.startRow === rowStart && point.endRow === rowEnd)?.label ?? null}
-                      onSelectRange={selectRiskRange}
-                    />
-                  </Panel>
+                    <ChartInsightCard
+                      title="B. Grouped anomaly-risk trend"
+                      subtitle="Average and maximum attack probability across row ranges."
+                      question="Which row ranges show higher attack probability?"
+                      meaning="The line shows probability movement across the upload, while red bars show attack concentration in each row bucket."
+                      insight={buildTrendInsight(analysis)}
+                      interaction="Scroll to zoom, drag to pan, or click a row bucket to filter the table."
+                      filename="anomaly-risk-trend.png"
+                      wide
+                    >
+                      <D3RiskTrendChart
+                        data={analysis.charts.trend}
+                        reviewThreshold={analysis.metadata.reviewThreshold}
+                        attackThreshold={analysis.metadata.attackThreshold}
+                        selectedRange={analysis.charts.trend.find((point) => point.startRow === rowStart && point.endRow === rowEnd)?.label ?? null}
+                        onSelectRange={selectRiskRange}
+                      />
+                    </ChartInsightCard>
                   </div>
                 </div>
 
                 <div className="upload-chart-grid upload-chart-grid-secondary">
                   <div id="upload-feature-explorer" className="upload-chart-cell">
-                  <Panel title="C. Traffic feature explorer" subtitle="Associations between traffic features and model output.">
-                    <div className="chart-axis-controls">
-                      <label>X-axis<select value={xFeature} onChange={(event) => setXFeature(event.target.value as ScatterFeature)}>{Object.entries(scatterFeatureLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-                      <label>Y-axis<select value={yFeature} onChange={(event) => setYFeature(event.target.value as ScatterFeature)}>{Object.entries(scatterFeatureLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-                    </div>
-                    <D3ScatterPlot rows={filteredRows} xFeature={xFeature} yFeature={yFeature} selectedRow={selectedRow} onSelectRow={selectRow} />
-                  </Panel>
+                    <ChartInsightCard
+                      title="C. Traffic feature explorer"
+                      subtitle="Feature separation for the currently filtered preview rows."
+                      question="Which traffic features separate normal and risky records?"
+                      meaning="Each point is a returned preview row. Size follows attack probability and color follows display category."
+                      insight={`Showing ${filteredRows.length.toLocaleString()} filtered preview rows from the capped response.`}
+                      interaction="Choose axes, hover points, zoom/pan, and click a point to inspect the row."
+                      filename="traffic-feature-explorer.png"
+                    >
+                      <div className="chart-axis-controls">
+                        <label>X-axis<select value={xFeature} onChange={(event) => setXFeature(event.target.value as ScatterFeature)}>{Object.entries(scatterFeatureLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                        <label>Y-axis<select value={yFeature} onChange={(event) => setYFeature(event.target.value as ScatterFeature)}>{Object.entries(scatterFeatureLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                      </div>
+                      <D3ScatterPlot rows={filteredRows} xFeature={xFeature} yFeature={yFeature} selectedRow={selectedRow} onSelectRow={selectRow} />
+                    </ChartInsightCard>
                   </div>
                   <div id="upload-protocol-risk" className="upload-chart-cell">
-                  <Panel title="D. Protocol risk comparison" subtitle="Stacked category counts and proportional attack risk.">
-                    <D3ProtocolRiskChart data={analysis.charts.protocolRisk} selectedProtocol={protocolFilter} onSelect={selectProtocol} />
-                  </Panel>
+                    <ChartInsightCard
+                      title="D. Protocol risk comparison"
+                      subtitle="Stacked category counts by protocol."
+                      question="Which protocols contain more review or attack records?"
+                      meaning="Bars compare Normal, Review Recommended, and Attack records within each protocol found in the upload."
+                      insight={buildProtocolInsight(analysis)}
+                      interaction="Sort by risk, hover for proportions, or click a segment to filter protocol and category."
+                      filename="protocol-risk.png"
+                    >
+                      <D3ProtocolRiskChart data={analysis.charts.protocolRisk} selectedProtocol={protocolFilter} onSelect={selectProtocol} />
+                    </ChartInsightCard>
                   </div>
                   <div id="upload-probability" className="upload-chart-cell">
-                  <Panel title="E. Attack-probability distribution" subtitle="Prediction frequency across model risk ranges.">
-                    <D3ProbabilityHistogram
-                      data={analysis.charts.probabilityBuckets}
-                      reviewThreshold={analysis.metadata.reviewThreshold}
-                      attackThreshold={analysis.metadata.attackThreshold}
-                      selectedLabel={selectedProbabilityBucket}
-                      onSelect={selectProbabilityBucket}
-                    />
-                  </Panel>
+                    <ChartInsightCard
+                      title="E. Attack-probability distribution"
+                      subtitle="Record frequency across model risk ranges."
+                      question="How confident is the model that rows are attack-like?"
+                      meaning="Buckets show how many rows fall into each attack-probability band. Threshold markers show review and attack cutoffs."
+                      insight={`Estimated average attack probability is ${estimatedAverageAttackProbability}% across all analysed rows.`}
+                      interaction="Hover for bucket details or click a bar to filter the preview table."
+                      filename="attack-probability-distribution.png"
+                    >
+                      <D3ProbabilityHistogram
+                        data={analysis.charts.probabilityBuckets}
+                        reviewThreshold={analysis.metadata.reviewThreshold}
+                        attackThreshold={analysis.metadata.attackThreshold}
+                        selectedLabel={selectedProbabilityBucket}
+                        onSelect={selectProbabilityBucket}
+                      />
+                    </ChartInsightCard>
                   </div>
                 </div>
               </section>
@@ -577,21 +616,16 @@ export function UploadLogsPage({
                   <MetaItem label="Labels" value={analysis.modelAnalysis.labelsAvailable ? "Available" : "Not available"} />
                 </div>
                 {!analysis.modelAnalysis.labelsAvailable ? (
-                  <p className="chart-note">Ground-truth labels were not found, so accuracy-based evaluation is unavailable. Prediction distribution and confidence analysis remain available.</p>
+                  <p className="chart-note">Ground-truth labels were not found, so accuracy-based evaluation is unavailable. Prediction distribution remains available without inventing accuracy.</p>
                 ) : null}
                 <div className="analytics-grid model-analysis-grid">
                   {analysis.modelAnalysis.charts.performance.length > 0 ? <Panel title="Model performance"><D3BarChart data={analysis.modelAnalysis.charts.performance} height={320} /></Panel> : null}
                   <Panel title="Prediction distribution"><D3BarChart data={analysis.modelAnalysis.charts.predictionDistribution} height={300} /></Panel>
-                  <Panel title="Model confidence"><D3BarChart data={analysis.modelAnalysis.charts.confidenceBuckets} height={300} /></Panel>
                   {analysis.modelAnalysis.labelsAvailable && analysis.modelAnalysis.models[0]?.confusionMatrix.length ? <Panel title="Confusion matrix"><D3HeatmapChart data={analysis.modelAnalysis.models[0].confusionMatrix} /></Panel> : null}
                 </div>
                 <div className="panel-table-wrap model-table-wrap">
                   <DataTable columns={modelColumns} rows={analysis.modelAnalysis.models} rowKey={(row) => row.modelName} />
                 </div>
-              </Panel>
-
-              <Panel title="Upload alerts" subtitle="Backend alerts generated by this analysis.">
-                {alerts.length > 0 ? <AlertList alerts={alerts} /> : <EmptyState title="No upload alerts" description="No backend alert records were generated." />}
               </Panel>
             </>
           ) : null}
@@ -773,6 +807,66 @@ function KpiCard({
   );
 }
 
+function ChartInsightCard({
+  title,
+  subtitle,
+  question,
+  meaning,
+  insight,
+  interaction,
+  filename,
+  wide = false,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  question: string;
+  meaning: string;
+  insight: string;
+  interaction: string;
+  filename: string;
+  wide?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={`chart-insight-export-wrap ${wide ? "chart-insight-export-wide" : ""}`}
+      data-chart-export-card
+    >
+      <Panel
+        title={title}
+        subtitle={subtitle}
+        aside={(
+          <button
+            type="button"
+            className="chart-action-button chart-card-export-button"
+            data-export-hidden="true"
+            onClick={(event) => exportChartCardAsPng(event.currentTarget, filename)}
+          >
+            Export PNG
+          </button>
+        )}
+      >
+        <div className="chart-insight-layout">
+          <aside className="chart-insight-panel">
+            <span>Question</span>
+            <strong>{question}</strong>
+            <p>{meaning}</p>
+            <div className="chart-insight-highlight">
+              <small>Key insight</small>
+              <b>{insight}</b>
+            </div>
+            <em>{interaction}</em>
+          </aside>
+          <div className="chart-insight-visual">
+            {children}
+          </div>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
 function ExplanationMetric({ label, value }: { label: string; value: string }) {
   return <div><span>{label}</span><strong>{value}</strong></div>;
 }
@@ -818,6 +912,46 @@ function formatDisplayDate(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function estimateAverageProbability(
+  buckets: UploadAnalysisResult["charts"]["probabilityBuckets"],
+) {
+  const bucketMidpoints: Record<string, number> = {
+    "0-20%": 10,
+    "21-40%": 30,
+    "41-60%": 50,
+    "61-80%": 70,
+    "81-100%": 90,
+  };
+  const total = buckets.reduce((sum, bucket) => sum + bucket.value, 0);
+  if (total === 0) return 0;
+
+  const weighted = buckets.reduce(
+    (sum, bucket) => sum + (bucketMidpoints[bucket.label] ?? 50) * bucket.value,
+    0,
+  );
+  return Math.round(weighted / total);
+}
+
+function buildTrendInsight(analysis: UploadAnalysisResult) {
+  const highestBucket = [...analysis.charts.trend].sort(
+    (left, right) => right.maximumAttackProbability - left.maximumAttackProbability,
+  )[0];
+  if (!highestBucket) {
+    return "No trend buckets were returned for this upload.";
+  }
+  return `Rows ${highestBucket.label} reached the highest probability peak at ${Math.round(highestBucket.maximumAttackProbability * 100)}%.`;
+}
+
+function buildProtocolInsight(analysis: UploadAnalysisResult) {
+  const highestProtocol = [...analysis.charts.protocolRisk].sort(
+    (left, right) => right.attackRate - left.attackRate || right.attack - left.attack,
+  )[0];
+  if (!highestProtocol) {
+    return "No protocol grouping was available in this upload.";
+  }
+  return `${highestProtocol.protocol} has the highest attack rate at ${(highestProtocol.attackRate * 100).toFixed(1)}%.`;
 }
 
 function clamp(value: number, minimum: number, maximum: number) {

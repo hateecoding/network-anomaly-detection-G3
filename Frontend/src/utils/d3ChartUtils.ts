@@ -39,20 +39,50 @@ export function hideChartTooltip() {
   );
 }
 
-export function exportSvgAsPng(svg: SVGSVGElement | null, filename: string) {
-  if (!svg) {
+export function exportChartCardAsPng(
+  trigger: HTMLElement | null,
+  filename: string,
+) {
+  const card =
+    trigger?.closest<HTMLElement>("[data-chart-export-card]") ??
+    trigger?.closest<HTMLElement>(".panel");
+
+  if (!card) {
     return;
   }
 
-  const clone = svg.cloneNode(true) as SVGSVGElement;
-  const viewBox = svg.viewBox.baseVal;
-  const width = viewBox.width || svg.clientWidth || 900;
-  const height = viewBox.height || svg.clientHeight || 500;
-  clone.setAttribute("width", String(width));
-  clone.setAttribute("height", String(height));
+  exportElementAsPng(card, filename);
+}
 
-  const serializer = new XMLSerializer();
-  const source = serializer.serializeToString(clone);
+export function exportElementAsPng(element: HTMLElement, filename: string) {
+  const rect = element.getBoundingClientRect();
+  const width = Math.ceil(Math.max(rect.width, element.scrollWidth, 320));
+  const height = Math.ceil(Math.max(rect.height, element.scrollHeight, 240));
+  const clone = element.cloneNode(true) as HTMLElement;
+
+  clone.querySelectorAll("[data-export-hidden='true']").forEach((item) => item.remove());
+  inlineComputedStyles(element, clone);
+
+  clone.style.width = `${width}px`;
+  clone.style.height = `${height}px`;
+  clone.style.margin = "0";
+  clone.style.background = "#0d1726";
+  clone.style.boxShadow = "none";
+
+  const wrapper = document.createElement("div");
+  wrapper.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+  wrapper.style.width = `${width}px`;
+  wrapper.style.height = `${height}px`;
+  wrapper.style.background = "#0d1726";
+  wrapper.appendChild(clone);
+
+  const source = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+      <foreignObject width="100%" height="100%">
+        ${new XMLSerializer().serializeToString(wrapper)}
+      </foreignObject>
+    </svg>
+  `;
   const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const image = new Image();
@@ -86,6 +116,8 @@ export function exportSvgAsPng(svg: SVGSVGElement | null, filename: string) {
       URL.revokeObjectURL(url);
     }, "image/png");
   };
+
+  image.onerror = () => URL.revokeObjectURL(url);
   image.src = url;
 }
 
@@ -113,4 +145,25 @@ function getTooltip() {
     document.body.appendChild(tooltip);
   }
   return tooltip;
+}
+
+function inlineComputedStyles(source: Element, target: Element) {
+  const computed = window.getComputedStyle(source);
+  const targetElement = target as HTMLElement | SVGElement;
+
+  for (let index = 0; index < computed.length; index += 1) {
+    const property = computed.item(index);
+    targetElement.style.setProperty(
+      property,
+      computed.getPropertyValue(property),
+      computed.getPropertyPriority(property),
+    );
+  }
+
+  Array.from(source.children).forEach((sourceChild, index) => {
+    const targetChild = target.children.item(index);
+    if (targetChild) {
+      inlineComputedStyles(sourceChild, targetChild);
+    }
+  });
 }

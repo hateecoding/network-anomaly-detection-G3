@@ -3,7 +3,7 @@ import * as d3 from "d3";
 import type { UploadRiskTrendPoint } from "../utils/uploadAnalysis";
 import {
   animatePathDraw,
-  exportSvgAsPng,
+  exportChartCardAsPng,
   hideChartTooltip,
   moveChartTooltip,
   showChartTooltip,
@@ -231,6 +231,7 @@ export function D3RiskTrendChart({
           <button
             type="button"
             className="chart-action-button"
+            data-export-hidden="true"
             onClick={() => {
               if (ref.current && zoomRef.current) {
                 d3.select(ref.current).transition().duration(350).call(
@@ -242,7 +243,12 @@ export function D3RiskTrendChart({
           >
             Reset zoom
           </button>
-          <button type="button" className="chart-action-button" onClick={() => exportSvgAsPng(ref.current, "anomaly-risk-trend.png")}>
+          <button
+            type="button"
+            className="chart-action-button"
+            data-export-hidden="true"
+            onClick={(event) => exportChartCardAsPng(event.currentTarget, "anomaly-risk-trend.png")}
+          >
             Export PNG
           </button>
         </div>

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import * as d3 from "d3";
 import type { ProtocolRiskPoint } from "../utils/uploadAnalysis";
 import {
-  exportSvgAsPng,
+  exportChartCardAsPng,
   hideChartTooltip,
   moveChartTooltip,
   showChartTooltip,
@@ -163,7 +163,8 @@ export function D3ProtocolRiskChart({
           <button
             type="button"
             className="chart-action-button"
-            onClick={() => exportSvgAsPng(ref.current, "protocol-risk.png")}
+            data-export-hidden="true"
+            onClick={(event) => exportChartCardAsPng(event.currentTarget, "protocol-risk.png")}
           >
             Export PNG
           </button>

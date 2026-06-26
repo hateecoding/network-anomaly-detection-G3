@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import * as d3 from "d3";
 import type { UploadAnalysisRow } from "../data/presentationData";
 import {
-  exportSvgAsPng,
+  exportChartCardAsPng,
   hideChartTooltip,
   moveChartTooltip,
   showChartTooltip,
@@ -177,6 +177,7 @@ export function D3ScatterPlot({
           <button
             type="button"
             className="chart-action-button"
+            data-export-hidden="true"
             onClick={() => {
               if (ref.current && zoomRef.current) {
                 d3.select(ref.current)
@@ -191,7 +192,8 @@ export function D3ScatterPlot({
           <button
             type="button"
             className="chart-action-button"
-            onClick={() => exportSvgAsPng(ref.current, "traffic-feature-explorer.png")}
+            data-export-hidden="true"
+            onClick={(event) => exportChartCardAsPng(event.currentTarget, "traffic-feature-explorer.png")}
           >
             Export PNG
           </button>

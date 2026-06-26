@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as d3 from "d3";
 import {
-  exportSvgAsPng,
+  exportChartCardAsPng,
   hideChartTooltip,
   moveChartTooltip,
   showChartTooltip,
@@ -126,7 +126,8 @@ export function D3ProbabilityHistogram({
         <button
           type="button"
           className="chart-action-button"
-          onClick={() => exportSvgAsPng(ref.current, "attack-probability-distribution.png")}
+          data-export-hidden="true"
+          onClick={(event) => exportChartCardAsPng(event.currentTarget, "attack-probability-distribution.png")}
         >
           Export PNG
         </button>
