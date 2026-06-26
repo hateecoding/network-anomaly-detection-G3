@@ -22,7 +22,7 @@ export function UploadBox({ file, disabled, onSelectFile }: UploadBoxProps) {
 
   return (
     <div
-      className={`upload-box ${dragActive ? "upload-box-active" : ""}`}
+      className={`upload-box upload-box-unified ${dragActive ? "upload-box-active" : ""} ${file ? "upload-box-ready" : ""}`}
       onDragEnter={(event) => {
         event.preventDefault();
         setDragActive(true);
@@ -48,19 +48,16 @@ export function UploadBox({ file, disabled, onSelectFile }: UploadBoxProps) {
       />
       <button
         type="button"
-        className="upload-drop-prompt"
+        className="upload-dropzone"
         disabled={disabled}
         onClick={() => inputRef.current?.click()}
       >
         <span className="upload-drop-icon" aria-hidden="true">⇧</span>
-        <span>
+        <span className="upload-drop-copy">
           <strong>Drag & drop CSV file here</strong>
           <small>or click to browse</small>
         </span>
-      </button>
-      <div className={`upload-selected-file ${file ? "upload-selected-file-ready" : ""}`}>
-        <span className="upload-file-icon" aria-hidden="true">▤</span>
-        <span className="upload-file-copy">
+        <span className={`upload-file-status ${file ? "upload-file-status-ready" : ""}`}>
           <strong>{file ? file.name : "No file selected yet"}</strong>
           <small>
             {file
@@ -68,7 +65,7 @@ export function UploadBox({ file, disabled, onSelectFile }: UploadBoxProps) {
               : "Drag and drop a CSV file or click the upload area to choose one."}
           </small>
         </span>
-      </div>
+      </button>
     </div>
   );
 }
