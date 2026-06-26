@@ -566,7 +566,7 @@ function mapUploadRow(record: BackendUploadRecord): UploadAnalysisRow {
     modelPrediction: record.model_prediction === "attack" ? "Attack" : "Normal",
     prediction,
     confidence: Math.round(clamp(record.confidence, 0, 1) * 100),
-    alertLevel: mapAlertLevel(record.alert_level, prediction, probabilityPercent),
+    alertLevel: mapAlertLevel(record.alert_level, prediction),
     detectionResult:
       prediction === "Attack"
         ? "ATTACK DETECTED"
@@ -621,7 +621,6 @@ function mapSeverity(value?: string | null): AlertRecord["severity"] {
 function mapAlertLevel(
   level: string,
   prediction: UploadAnalysisRow["prediction"],
-  probabilityPercent: number,
 ): UploadAnalysisRow["alertLevel"] {
   if (prediction === "Attack") {
     return level.toLowerCase() === "high" ? "High" : "Medium";

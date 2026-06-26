@@ -16,13 +16,12 @@ import {
   type UploadModelAnalysisItem,
 } from "../utils/uploadAnalysis";
 import { AlertList } from "./AlertList";
-import { D3BarChart } from "./D3BarChart";
 import { D3HeatmapChart } from "./D3HeatmapChart";
-import { D3HistogramChart } from "./D3HistogramChart";
-import { D3PieChart } from "./D3PieChart";
 import { D3ProbabilityHistogram } from "./D3ProbabilityHistogram";
 import { D3ProtocolRiskChart } from "./D3ProtocolRiskChart";
 import { D3RiskTrendChart } from "./D3RiskTrendChart";
+import { BarChart as D3BarChart } from "./BarChart";
+import { PieChart as D3PieChart } from "./PieChart";
 import {
   D3ScatterPlot,
   scatterFeatureLabels,
@@ -583,7 +582,7 @@ export function UploadLogsPage({
                 <div className="analytics-grid model-analysis-grid">
                   {analysis.modelAnalysis.charts.performance.length > 0 ? <Panel title="Model performance"><D3BarChart data={analysis.modelAnalysis.charts.performance} height={320} /></Panel> : null}
                   <Panel title="Prediction distribution"><D3BarChart data={analysis.modelAnalysis.charts.predictionDistribution} height={300} /></Panel>
-                  <Panel title="Model confidence"><D3HistogramChart data={analysis.modelAnalysis.charts.confidenceBuckets} height={300} /></Panel>
+                  <Panel title="Model confidence"><D3BarChart data={analysis.modelAnalysis.charts.confidenceBuckets} height={300} /></Panel>
                   {analysis.modelAnalysis.labelsAvailable && analysis.modelAnalysis.models[0]?.confusionMatrix.length ? <Panel title="Confusion matrix"><D3HeatmapChart data={analysis.modelAnalysis.models[0].confusionMatrix} /></Panel> : null}
                 </div>
                 <div className="panel-table-wrap model-table-wrap">

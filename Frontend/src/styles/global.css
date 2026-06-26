@@ -179,7 +179,6 @@ button {
 .alert-item p,
 .alert-item-meta,
 .prediction-card p,
-.upload-copy,
 .empty-state p,
 .activity-feed-item span,
 .route-list-item p,
@@ -234,7 +233,6 @@ button {
 .clock-card,
 .signal-card,
 .refresh-button,
-.results-copy,
 .menu-toggle {
   display: inline-flex;
   align-items: center;
@@ -331,10 +329,6 @@ button {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   gap: 16px;
   min-width: 0;
-}
-
-.upload-summary-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
 }
 
 .compact-grid {
@@ -555,7 +549,6 @@ button {
 .pie-chart-legend-item strong,
 .route-list-item strong,
 .activity-feed-item strong,
-.upload-actions span,
 .prediction-card strong,
 .data-table strong {
   display: block;
@@ -590,14 +583,12 @@ button {
 }
 
 .alert-item p,
-.prediction-card p,
-.upload-copy {
+.prediction-card p {
   line-height: 1.55;
 }
 
 .alert-item-meta,
 .route-list-side,
-.upload-toolbar,
 .button-row,
 .inline-meta {
   display: flex;
@@ -663,32 +654,6 @@ button {
   background: rgba(96, 165, 250, 0.08);
 }
 
-.upload-actions {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.upload-toolbar {
-  margin-top: 18px;
-}
-
-.upload-status-line {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 34px;
-  animation: fadeIn 220ms ease both;
-}
-
-.result-meta-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
-  gap: 14px;
-  min-width: 0;
-}
-
 .result-meta-item {
   padding: 16px;
   border-radius: 16px;
@@ -697,8 +662,7 @@ button {
 }
 
 .result-meta-item span,
-.control-label,
-.table-count-copy {
+.control-label {
   color: var(--muted);
   font-size: 0.88rem;
 }
@@ -765,14 +729,6 @@ button {
   border: 1px solid var(--line);
   background: rgba(8, 14, 24, 0.88);
   color: var(--text);
-}
-
-.filter-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  align-items: center;
-  margin-bottom: 18px;
 }
 
 .search-input,
@@ -892,11 +848,6 @@ button {
   background: rgba(255, 255, 255, 0.02);
 }
 
-.subtle-state {
-  margin: 16px 0;
-  text-align: left;
-}
-
 .model-analysis-grid {
   margin-top: 16px;
 }
@@ -988,23 +939,11 @@ button {
   margin-top: 12px;
 }
 
-.chart-control-row {
-  display: flex;
-  align-items: end;
-  gap: 14px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-
 .chart-note {
   margin: 0;
   color: var(--muted);
   font-size: 0.82rem;
   line-height: 1.45;
-}
-
-.compact-button-row {
-  margin-top: 0;
 }
 
 .upload-dashboard-page {
@@ -1056,13 +995,6 @@ button {
   font-size: 1.08rem;
 }
 
-.upload-connection-badges {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 .upload-command-card .upload-box {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -1076,25 +1008,6 @@ button {
   max-width: 540px;
   font-size: 1rem;
   line-height: 1.35;
-}
-
-.upload-command-card .upload-copy {
-  margin-bottom: 0;
-  font-size: 0.84rem;
-}
-
-.upload-command-card .upload-actions {
-  display: grid;
-  justify-items: end;
-  min-width: 150px;
-}
-
-.upload-command-card .upload-actions span {
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.82rem;
 }
 
 .upload-command-actions {
@@ -1799,48 +1712,6 @@ button {
 
 .d3-tooltip span {
   color: var(--muted);
-  font-size: 0.7rem;
-}
-
-/* Compact SOC workspace used only by the Upload Logs page. */
-.app-shell-upload {
-  grid-template-columns: 240px minmax(0, 1fr);
-}
-
-.main-shell-upload {
-  padding: 16px;
-}
-
-.topbar-upload {
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.topbar-upload .eyebrow {
-  display: none;
-}
-
-.topbar-upload h2 {
-  font-size: 1.38rem;
-  line-height: 1.1;
-}
-
-.topbar-upload .topbar-subtitle {
-  margin: 4px 0 0;
-  font-size: 0.76rem;
-}
-
-.topbar-upload .topbar-actions {
-  gap: 6px;
-}
-
-.topbar-upload .clock-card,
-.topbar-upload .signal-card,
-.topbar-upload .refresh-button,
-.topbar-upload .status-badge {
-  min-height: 34px;
-  padding: 7px 10px;
-  border-radius: 8px;
   font-size: 0.7rem;
 }
 
@@ -2597,8 +2468,7 @@ button {
   .summary-grid,
   .analytics-grid,
   .dashboard-lower-grid,
-  .compact-grid,
-  .result-meta-grid {
+  .compact-grid {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -2683,10 +2553,7 @@ button {
   }
 
   .topbar,
-  .filter-row,
   .panel-header,
-  .upload-actions,
-  .upload-toolbar,
   .route-list-item {
     flex-direction: column;
     align-items: flex-start;
@@ -2696,7 +2563,6 @@ button {
   .prediction-form-grid,
   .prediction-card-metrics,
   .compact-grid,
-  .result-meta-grid,
   .table-control-grid,
   .pie-chart-shell {
     grid-template-columns: 1fr;
@@ -2738,10 +2604,6 @@ button {
 @media (max-width: 640px) {
   .upload-command-card .upload-box {
     grid-template-columns: 1fr;
-  }
-
-  .upload-command-card .upload-actions {
-    justify-items: start;
   }
 
   .upload-command-heading,
@@ -2836,14 +2698,6 @@ button {
 }
 
 @media (max-width: 900px) {
-  .main-shell-upload {
-    padding: 14px;
-  }
-
-  .topbar-upload {
-    align-items: flex-start;
-  }
-
   .upload-dashboard-page .upload-command-card,
   .upload-dashboard-page .upload-kpi-grid,
   .upload-dashboard-page .upload-filter-toolbar,

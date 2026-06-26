@@ -81,7 +81,7 @@ export function BarChart({
       .call(axisLeft)
       .call((group: any) => group.select(".domain").remove());
 
-    const bars = svg
+    svg
       .append("g")
       .selectAll("rect")
       .data(data)

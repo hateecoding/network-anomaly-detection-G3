@@ -8,7 +8,7 @@ import {
   ModelMetricName,
 } from "../utils/modelInsights";
 import { STANDARD_SYNC_INTERVAL_MS, type SyncCallbacks } from "../utils/sync";
-import { D3BarChart } from "./D3BarChart";
+import { BarChart as D3BarChart } from "./BarChart";
 import { DataColumn, DataTable } from "./DataTable";
 import { EmptyState } from "./EmptyState";
 import { LoadingOverlay } from "./LoadingOverlay";
@@ -96,7 +96,9 @@ export function ModelInsightsPage({
         setData(nextData);
         setStatus({
           type: "success",
-          message: nextData.items.length > 0 ? "Model metrics loaded from the backend." : "No model metrics are available yet.",
+          message: nextData.items.length > 0
+            ? "Historical model metrics loaded from the backend."
+            : "No model metrics are available yet.",
         });
         onSyncSuccess();
       } catch {
@@ -131,7 +133,7 @@ export function ModelInsightsPage({
     <div className="page-grid">
       <Panel
         title="Model insights"
-        subtitle="Backend model metrics."
+        subtitle="Historical training/evaluation metrics from backend metadata."
       >
         <div className="inline-meta">
           <span>{status.message}</span>
@@ -148,42 +150,42 @@ export function ModelInsightsPage({
           tone={recommended ? "normal" : "info"}
         />
         <SummaryCard
-          label="Accuracy"
+          label="Historical accuracy"
           value={formatMetricPercent(recommended?.metrics.accuracy)}
-          helper="Recommended model accuracy"
+          helper="Stored evaluation metric"
           tone="info"
         />
         <SummaryCard
-          label="Precision"
+          label="Historical precision"
           value={formatMetricPercent(recommended?.metrics.precision)}
-          helper="Positive prediction reliability"
+          helper="Stored evaluation metric"
           tone="suspicious"
         />
         <SummaryCard
-          label="Recall"
+          label="Historical recall"
           value={formatMetricPercent(recommended?.metrics.recall)}
-          helper="Attack detection coverage"
+          helper="Stored evaluation metric"
           tone="attack"
         />
         <SummaryCard
-          label="F1-score"
+          label="Historical F1-score"
           value={formatMetricPercent(recommended?.metrics.f1)}
-          helper="Balanced precision and recall"
+          helper="Stored evaluation metric"
           tone="normal"
         />
       </div>
 
       <div className="analytics-grid">
-        <MetricChartPanel title="Model comparison" metric="f1" data={data} subtitle="F1-score by model." />
-        <MetricChartPanel title="Accuracy comparison" metric="accuracy" data={data} subtitle="Accuracy by model." />
+        <MetricChartPanel title="Model comparison" metric="f1" data={data} subtitle="Historical F1-score by model." />
+        <MetricChartPanel title="Accuracy comparison" metric="accuracy" data={data} subtitle="Historical accuracy by model." />
       </div>
 
       <div className="analytics-grid">
-        <MetricChartPanel title="Precision comparison" metric="precision" data={data} subtitle="Precision by model." />
-        <MetricChartPanel title="Recall comparison" metric="recall" data={data} subtitle="Recall by model." />
+        <MetricChartPanel title="Precision comparison" metric="precision" data={data} subtitle="Historical precision by model." />
+        <MetricChartPanel title="Recall comparison" metric="recall" data={data} subtitle="Historical recall by model." />
       </div>
 
-      <Panel title="Model comparison table">
+      <Panel title="Historical model comparison table">
         <div className="panel-table-wrap">
           {status.type === "loading" ? <LoadingOverlay message="Loading model metrics..." /> : null}
           {data && data.items.length > 0 ? (

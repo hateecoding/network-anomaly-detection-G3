@@ -647,10 +647,6 @@ def analyze_upload_file(filename: str, contents: bytes) -> UploadAnalysisRespons
     return response
 
 
-def analyze_csv_upload(filename: str, contents: bytes) -> UploadAnalysisResponse:
-    return analyze_upload_file(filename=filename, contents=contents)
-
-
 class UploadHistoryStore:
     def __init__(self):
         self._total_records = 0

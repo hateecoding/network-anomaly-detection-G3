@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { VisitorIdentifier } from "../data/presentationData";
 import { fetchLiveTrafficData, type LiveTrafficData } from "../utils/liveVisitors";
 import { LIVE_SYNC_INTERVAL_MS, type SyncCallbacks } from "../utils/sync";
-import { D3BarChart } from "./D3BarChart";
+import { BarChart as D3BarChart } from "./BarChart";
 import { DataColumn, DataTable } from "./DataTable";
 import { EmptyState } from "./EmptyState";
 import { LoadingOverlay } from "./LoadingOverlay";

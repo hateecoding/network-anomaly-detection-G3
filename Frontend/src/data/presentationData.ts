@@ -82,6 +82,3 @@ export type ActivityFeedItem = {
   timestamp: string;
   tone: Tone;
 };
-
-export const emptyUploadStateMessage =
-  "Upload a CSV file to run AI analysis and populate the results table.";

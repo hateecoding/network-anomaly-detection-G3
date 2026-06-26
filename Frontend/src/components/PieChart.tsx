@@ -61,7 +61,7 @@ export function PieChart({
       .arc<d3.PieArcDatum<PieSegment>>()
       .innerRadius(radius * 0.62)
       .outerRadius(radius * 0.62);
-    const paths = group
+    group
       .selectAll("path")
       .data(pie(segments))
       .enter()
