@@ -2018,7 +2018,7 @@ button {
 
 .upload-selected-file {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
+  grid-template-columns: 28px minmax(0, 1fr);
   gap: 9px;
   align-items: center;
   margin: 12px;
@@ -2056,15 +2056,6 @@ button {
 .upload-file-copy small {
   margin-top: 3px;
   color: var(--muted);
-  font-size: 0.62rem;
-}
-
-.upload-file-button {
-  padding: 5px 7px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  color: var(--muted);
-  background: rgba(255, 255, 255, 0.03);
   font-size: 0.62rem;
 }
 
@@ -3211,14 +3202,6 @@ button {
   .upload-drop-prompt {
     border-right: 0;
     border-bottom: 1px solid var(--line);
-  }
-
-  .upload-selected-file {
-    grid-template-columns: 28px minmax(0, 1fr);
-  }
-
-  .upload-file-button {
-    grid-column: 1 / -1;
   }
 
   .upload-analysis-tabs {

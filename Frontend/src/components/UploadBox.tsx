@@ -61,21 +61,13 @@ export function UploadBox({ file, disabled, onSelectFile }: UploadBoxProps) {
       <div className={`upload-selected-file ${file ? "upload-selected-file-ready" : ""}`}>
         <span className="upload-file-icon" aria-hidden="true">▤</span>
         <span className="upload-file-copy">
-          <strong>{file ? file.name : "No file selected"}</strong>
+          <strong>{file ? file.name : "No file selected yet"}</strong>
           <small>
             {file
               ? `${formatFileSize(file.size)} · CSV ready`
-              : "Choose a network traffic dataset"}
+              : "Drag and drop a CSV file or click the upload area to choose one."}
           </small>
         </span>
-        <button
-          type="button"
-          className="upload-file-button"
-          disabled={disabled}
-          onClick={() => inputRef.current?.click()}
-        >
-          Browse
-        </button>
       </div>
     </div>
   );
