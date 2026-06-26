@@ -18,6 +18,9 @@ type NumericField =
   | "destinationHostCount"
   | "destinationHostServiceCount";
 
+type TextField = "serviceDetail" | "connectionDetail";
+type FormField = NumericField | TextField;
+
 type PredictionFormInput = Record<NumericField, string> & {
   protocolGroup: PredictionInput["protocolGroup"];
   serviceGroup: PredictionInput["serviceGroup"];
@@ -53,21 +56,39 @@ const fieldConfig: Record<NumericField, { label: string; description: string; ma
 };
 
 const initialInput: PredictionFormInput = {
-  duration: "",
-  srcBytes: "",
-  dstBytes: "",
-  totalBytes: "",
-  byteRatio: "",
-  activityCount: "",
-  serviceCount: "",
-  sameServiceRate: "",
-  destinationHostCount: "",
-  destinationHostServiceCount: "",
+  duration: "1.2",
+  srcBytes: "1200",
+  dstBytes: "800",
+  totalBytes: "2000",
+  byteRatio: "1.5",
+  activityCount: "2",
+  serviceCount: "1",
+  sameServiceRate: "0.8",
+  destinationHostCount: "3",
+  destinationHostServiceCount: "2",
   protocolGroup: "TCP",
   serviceGroup: "WEB",
   connectionGroup: "Established",
   serviceDetail: "http",
   connectionDetail: "sf",
+};
+
+const attackLikeInput: PredictionFormInput = {
+  duration: "0.00001",
+  srcBytes: "1762",
+  dstBytes: "0",
+  totalBytes: "1762",
+  byteRatio: "1762",
+  activityCount: "14",
+  serviceCount: "12",
+  sameServiceRate: "0.86",
+  destinationHostCount: "220",
+  destinationHostServiceCount: "240",
+  protocolGroup: "UDP",
+  serviceGroup: "OTHER",
+  connectionGroup: "ERROR",
+  serviceDetail: "other",
+  connectionDetail: "int",
 };
 
 type SelfTestPageProps = SyncCallbacks & {
@@ -81,6 +102,8 @@ export function SelfTestPage({
 }: SelfTestPageProps) {
   const [isPending, startTransition] = useTransition();
   const [input, setInput] = useState<PredictionFormInput>(initialInput);
+  const [touched, setTouched] = useState<Partial<Record<FormField, boolean>>>({});
+  const [submitted, setSubmitted] = useState(false);
   const [result, setResult] = useState<{
     confidence: number;
     interpretation: string;
@@ -93,7 +116,7 @@ export function SelfTestPage({
     message: string;
   }>({
     type: "idle",
-    message: "Enter the 15 harmonized model features.",
+    message: "Sample normal traffic is loaded. Click Predict to call the live backend.",
   });
 
   const validationErrors = validateInput(input);
@@ -127,6 +150,7 @@ export function SelfTestPage({
   }, [refreshNonce, onSyncFailure, onSyncSuccess]);
 
   const handlePredict = async () => {
+    setSubmitted(true);
     if (!isValid) {
       setStatus({ type: "error", message: "Correct the highlighted fields before prediction." });
       return;
@@ -165,18 +189,37 @@ export function SelfTestPage({
                 key={field}
                 label={fieldConfig[field].label}
                 description={fieldConfig[field].description}
-                error={validationErrors[field]}
+                error={shouldShowError(field, touched, submitted) ? validationErrors[field] : undefined}
                 value={input[field]}
                 max={fieldConfig[field].max}
-                onChange={(value) => setInput((current) => ({ ...current, [field]: value }))}
+                onChange={(value) => {
+                  setTouched((current) => ({ ...current, [field]: true }));
+                  setInput((current) => ({ ...current, [field]: value }));
+                }}
               />
             ))}
 
             <SelectInput label="Protocol group" value={input.protocolGroup} options={["TCP", "UDP", "ICMP", "OTHER"]} onChange={(value) => setInput((current) => ({ ...current, protocolGroup: value as PredictionInput["protocolGroup"] }))} />
             <SelectInput label="Service group" value={input.serviceGroup} options={["WEB", "DNS", "EMAIL", "FILE", "INFRA", "REMOTE", "OTHER"]} onChange={(value) => setInput((current) => ({ ...current, serviceGroup: value as PredictionInput["serviceGroup"] }))} />
             <SelectInput label="Connection group" value={input.connectionGroup} options={["Established", "Attempted", "Rejected", "Reset", "ERROR"]} onChange={(value) => setInput((current) => ({ ...current, connectionGroup: value as PredictionInput["connectionGroup"] }))} />
-            <TextInput label="Service detail" value={input.serviceDetail} onChange={(value) => setInput((current) => ({ ...current, serviceDetail: value }))} />
-            <TextInput label="Connection detail" value={input.connectionDetail} onChange={(value) => setInput((current) => ({ ...current, connectionDetail: value }))} />
+            <TextInput
+              label="Service detail"
+              value={input.serviceDetail}
+              error={shouldShowError("serviceDetail", touched, submitted) ? validationErrors.serviceDetail : undefined}
+              onChange={(value) => {
+                setTouched((current) => ({ ...current, serviceDetail: true }));
+                setInput((current) => ({ ...current, serviceDetail: value }));
+              }}
+            />
+            <TextInput
+              label="Connection detail"
+              value={input.connectionDetail}
+              error={shouldShowError("connectionDetail", touched, submitted) ? validationErrors.connectionDetail : undefined}
+              onChange={(value) => {
+                setTouched((current) => ({ ...current, connectionDetail: true }));
+                setInput((current) => ({ ...current, connectionDetail: value }));
+              }}
+            />
           </div>
 
           <div className="button-row">
@@ -186,9 +229,20 @@ export function SelfTestPage({
             <button type="button" className="secondary-button" onClick={() => {
               setInput(initialInput);
               setResult(null);
-              setStatus({ type: "idle", message: "Form reset." });
+              setTouched({});
+              setSubmitted(false);
+              setStatus({ type: "idle", message: "Sample normal traffic loaded." });
             }} disabled={isLoading}>
-              Reset
+              Load sample normal traffic
+            </button>
+            <button type="button" className="secondary-button" onClick={() => {
+              setInput(attackLikeInput);
+              setResult(null);
+              setTouched({});
+              setSubmitted(false);
+              setStatus({ type: "idle", message: "Sample attack-like traffic loaded." });
+            }} disabled={isLoading}>
+              Load sample attack-like traffic
             </button>
           </div>
           <p className={`inline-message inline-message-${statusTone}`}>{status.message}</p>
@@ -250,17 +304,18 @@ function SelectInput({ label, value, options, onChange }: { label: string; value
   );
 }
 
-function TextInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function TextInput({ error, label, value, onChange }: { error?: string; label: string; value: string; onChange: (value: string) => void }) {
   return (
     <label className="input-group">
       <span>{label}</span>
       <input value={value} maxLength={64} onChange={(event) => onChange(event.target.value)} />
+      {error ? <small className="field-error">{error}</small> : null}
     </label>
   );
 }
 
 function validateInput(input: PredictionFormInput) {
-  const errors: Partial<Record<NumericField, string>> = {};
+  const errors: Partial<Record<FormField, string>> = {};
   for (const field of numericFields) {
     const rawValue = input[field].trim();
     const value = Number(rawValue);
@@ -276,7 +331,17 @@ function validateInput(input: PredictionFormInput) {
       errors.totalBytes = "Total bytes must equal source bytes plus destination bytes.";
     }
   }
+  if (!input.serviceDetail.trim()) errors.serviceDetail = "Service detail is required.";
+  if (!input.connectionDetail.trim()) errors.connectionDetail = "Connection detail is required.";
   return errors;
+}
+
+function shouldShowError(
+  field: FormField,
+  touched: Partial<Record<FormField, boolean>>,
+  submitted: boolean,
+) {
+  return submitted || Boolean(touched[field]);
 }
 
 function toPredictionInput(input: PredictionFormInput): PredictionInput {

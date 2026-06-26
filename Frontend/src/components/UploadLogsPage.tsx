@@ -92,7 +92,7 @@ export function UploadLogsPage({
   }>({
     type: cachedAnalysis ? "success" : "idle",
     message: cachedAnalysis
-      ? "Restored latest analysis from local cache."
+      ? `Restored cached analysis: ${cachedAnalysis.summary.filename}.`
       : "Select a CSV file to begin backend analysis.",
   });
 
@@ -104,6 +104,7 @@ export function UploadLogsPage({
     analysis?.modelAnalysis.models[0] ??
     null;
   const uniqueProtocols = [...new Set(rows.map((row) => row.protocol))].sort();
+  const restoredCacheActive = hasAnalysis && !selectedFile && state.type === "success";
 
   const filteredRows = sortRows(
     rows.filter((row) => {
@@ -338,6 +339,13 @@ export function UploadLogsPage({
                 ) : null}
               </div>
               <UploadBox file={selectedFile} onSelectFile={setSelectedFile} disabled={state.type === "loading"} />
+              {restoredCacheActive && analysis ? (
+                <div className="cached-analysis-callout">
+                  <strong>Restored cached analysis</strong>
+                  <span>{analysis.summary.filename}</span>
+                  <small>Generated {formatDisplayDate(analysis.summary.updatedAt)}. Choose a new CSV to replace this analysis.</small>
+                </div>
+              ) : null}
             </div>
 
             <div className="upload-command-actions">
@@ -612,17 +620,45 @@ function ExplanationPanel({
   onToggle: () => void;
 }) {
   if (!expanded) {
+    const compactCategory = row?.prediction === "Review Recommended" ? "Review" : row?.prediction;
     return (
-      <section className="panel explanation-panel explanation-panel-collapsed">
+      <section
+        className="panel explanation-panel explanation-panel-collapsed"
+        role="button"
+        tabIndex={0}
+        aria-label="Expand prediction explanation panel"
+        onClick={onToggle}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onToggle();
+          }
+        }}
+      >
         <button
           type="button"
           className="explanation-toggle-button explanation-expand-button"
           aria-label="Expand prediction explanation"
-          onClick={onToggle}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggle();
+          }}
         >
           ‹
         </button>
-        <span>Prediction explanation</span>
+        <div className="collapsed-explanation-copy">
+          <span>Prediction Explanation</span>
+          {row ? (
+            <>
+              <strong>{row.rowId}</strong>
+              <small className={`collapsed-explanation-badge collapsed-explanation-${row.prediction === "Attack" ? "attack" : row.prediction === "Review Recommended" ? "review" : "normal"}`}>
+                {compactCategory}
+              </small>
+            </>
+          ) : (
+            <small>Details</small>
+          )}
+        </div>
       </section>
     );
   }
@@ -772,6 +808,17 @@ function parseProbabilityBucket(bucket: string): [number, number] {
 
 function formatShare(value: number, total: number) {
   return `${total > 0 ? ((value / total) * 100).toFixed(2) : "0.00"}% of total`;
+}
+
+function formatDisplayDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function clamp(value: number, minimum: number, maximum: number) {
