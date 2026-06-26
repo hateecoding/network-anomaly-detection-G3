@@ -14,14 +14,15 @@ type NavItem = {
   id: PageId;
   label: string;
   caption: string;
+  icon: string;
 };
 
 const navItems: NavItem[] = [
-  { id: "dashboard", label: "Dashboard", caption: "System summary" },
-  { id: "upload", label: "Upload Logs", caption: "Batch analysis" },
-  { id: "visitors", label: "Live Visitors", caption: "Website activity" },
-  { id: "model-insights", label: "Model Insights", caption: "Model metrics" },
-  { id: "self-test", label: "Self-Test", caption: "Manual prediction" },
+  { id: "dashboard", label: "Dashboard", caption: "System summary", icon: "DB" },
+  { id: "upload", label: "Upload Logs", caption: "Batch analysis", icon: "UL" },
+  { id: "visitors", label: "Live Visitors", caption: "Website activity", icon: "LV" },
+  { id: "model-insights", label: "Model Insights", caption: "Model metrics", icon: "MI" },
+  { id: "self-test", label: "Self-Test", caption: "Manual prediction", icon: "ST" },
 ];
 
 const pageHeadings: Record<PageId, { title: string; subtitle: string }> = {
@@ -56,6 +57,8 @@ type LayoutProps = {
   children: ReactNode;
 };
 
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "aegis-net.sidebar-collapsed";
+
 export function Layout({
   activePage,
   lastSyncAt,
@@ -65,6 +68,9 @@ export function Layout({
   children,
 }: LayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
+    loadSidebarCollapsedPreference(activePage),
+  );
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
@@ -73,10 +79,28 @@ export function Layout({
   }, []);
 
   const heading = pageHeadings[activePage];
+  const toggleSidebar = () => {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      saveSidebarCollapsedPreference(next);
+      return next;
+    });
+  };
 
   return (
-    <div className={`app-shell app-shell-${activePage}`}>
-      <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
+    <div className={`app-shell app-shell-${activePage} ${sidebarCollapsed ? "app-shell-sidebar-collapsed" : ""}`}>
+      <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+        <button
+          type="button"
+          className="sidebar-collapse-button"
+          aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!sidebarCollapsed}
+          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          onClick={toggleSidebar}
+        >
+          {sidebarCollapsed ? "›" : "‹"}
+        </button>
+
         <div className="sidebar-brand">
           <img className="brand-mark" src="/favicon.svg" alt="" />
           <div className="sidebar-brand-copy">
@@ -91,21 +115,29 @@ export function Layout({
               key={item.id}
               type="button"
               className={`nav-item ${item.id === activePage ? "nav-item-active" : ""}`}
+              title={sidebarCollapsed ? `${item.label} - ${item.caption}` : undefined}
+              aria-label={sidebarCollapsed ? item.label : undefined}
               onClick={() => {
                 onNavigate(item.id);
                 setMobileOpen(false);
               }}
             >
-              <span>{item.label}</span>
-              <small>{item.caption}</small>
+              <span className="nav-item-icon" aria-hidden="true">{item.icon}</span>
+              <span className="nav-item-copy">
+                <span>{item.label}</span>
+                <small>{item.caption}</small>
+              </span>
             </button>
           ))}
         </nav>
 
         <div className="sidebar-footer">
-          <p className="eyebrow">Deployment Status</p>
-          <StatusBadge label="Live AI Service" tone={"info" satisfies Tone} />
-          <p>Connected to FastAPI endpoints for upload analysis, dashboard summary, visitors, and prediction.</p>
+          <span className="sidebar-status-dot" aria-hidden="true" />
+          <div className="sidebar-footer-copy">
+            <p className="eyebrow">Deployment Status</p>
+            <StatusBadge label="Live AI Service" tone={"info" satisfies Tone} />
+            <p>Connected to FastAPI endpoints for upload analysis, dashboard summary, visitors, and prediction.</p>
+          </div>
         </div>
       </aside>
 
@@ -189,4 +221,28 @@ function formatExactTimestamp(date: Date | null) {
     minute: "2-digit",
     second: "2-digit",
   }).format(date);
+}
+
+function loadSidebarCollapsedPreference(activePage: PageId) {
+  try {
+    const savedPreference = window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
+    if (savedPreference === "true") {
+      return true;
+    }
+    if (savedPreference === "false") {
+      return false;
+    }
+  } catch {
+    // Storage can be unavailable in private or restricted browser contexts.
+  }
+
+  return activePage === "upload";
+}
+
+function saveSidebarCollapsedPreference(collapsed: boolean) {
+  try {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(collapsed));
+  } catch {
+    // Storage can be unavailable in private or restricted browser contexts.
+  }
 }
