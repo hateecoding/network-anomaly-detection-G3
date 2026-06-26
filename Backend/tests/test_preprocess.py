@@ -1,3 +1,4 @@
+import re
 import sys
 from pathlib import Path
 import unittest
@@ -9,7 +10,11 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from services.classification import get_display_category
-from services.preprocess import get_preprocessing_status, prepare_batch_input
+from services.preprocess import (
+    LABEL_MAPPING_FILE_ERROR,
+    get_preprocessing_status,
+    prepare_batch_input,
+)
 
 
 class ClassificationTests(unittest.TestCase):
@@ -56,6 +61,17 @@ class PreprocessValidationTests(unittest.TestCase):
     def test_missing_required_fields_are_rejected(self):
         with self.assertRaisesRegex(ValueError, "missing required traffic fields"):
             prepare_batch_input(pd.DataFrame([{"duration": 1, "src_bytes": 10}]))
+
+    def test_label_category_mapping_file_is_rejected_with_specific_message(self):
+        frame = pd.DataFrame(
+            [
+                {"label": "back", "category": "DoS"},
+                {"label": "normal", "category": "Normal"},
+            ]
+        )
+
+        with self.assertRaisesRegex(ValueError, re.escape(LABEL_MAPPING_FILE_ERROR)):
+            prepare_batch_input(frame)
 
     def test_invalid_numeric_rows_are_rejected(self):
         frame = pd.DataFrame(

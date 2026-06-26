@@ -37,6 +37,11 @@ FALLBACK_WARNING = (
     "The fitted preprocessing pipeline is unavailable. Predictions are using "
     "manual feature alignment and should not be treated as validated model performance."
 )
+LABEL_MAPPING_FILE_ERROR = (
+    "This file is a label/category mapping file, not a network traffic dataset. "
+    "Please upload a dataset containing traffic features such as duration, "
+    "protocol_type, service, flag, src_bytes, dst_bytes, count, srv_count, and label."
+)
 LOGGER = logging.getLogger(__name__)
 
 
@@ -557,6 +562,9 @@ def _text_series(
 def _validate_raw_network_input(raw_df: pd.DataFrame) -> None:
     cleaned_df = clean_column_names(raw_df)
     source_lookup = _build_source_lookup(cleaned_df)
+    if _looks_like_label_mapping_file(set(source_lookup)):
+        raise ValueError(LABEL_MAPPING_FILE_ERROR)
+
     required_groups = {
         "duration": FIELD_ALIASES["duration"],
         "source bytes": FIELD_ALIASES["src_bytes"],
@@ -612,6 +620,45 @@ def _validate_raw_network_input(raw_df: pd.DataFrame) -> None:
     if row_errors:
         preview = "; ".join(row_errors[:10])
         raise ValueError(f"Uploaded data contains invalid values: {preview}.")
+
+
+def _looks_like_label_mapping_file(columns: set[str]) -> bool:
+    if not columns:
+        return False
+
+    mapping_reference_columns = {
+        "label",
+        "category",
+        "attack_cat",
+        "attack_category",
+        "attack_name",
+        "class",
+        "target",
+        "is_attack",
+        "description",
+        "name",
+        "id",
+        "index",
+    }
+    traffic_columns = set().union(
+        FIELD_ALIASES["duration"],
+        FIELD_ALIASES["src_bytes"],
+        FIELD_ALIASES["dst_bytes"],
+        FIELD_ALIASES["activity_count"],
+        FIELD_ALIASES["service_count"],
+        FIELD_ALIASES["destination_host_count"],
+        FIELD_ALIASES["destination_host_service_count"],
+        FIELD_ALIASES["protocol_group"],
+        FIELD_ALIASES["protocol_raw"],
+        FIELD_ALIASES["service_group"],
+        FIELD_ALIASES["service_raw"],
+        FIELD_ALIASES["connection_group"],
+        FIELD_ALIASES["connection_raw"],
+    )
+
+    has_mapping_signal = bool(columns & {"label", "category", "attack_cat", "attack_name"})
+    has_traffic_signal = bool(columns & traffic_columns)
+    return has_mapping_signal and not has_traffic_signal and columns <= mapping_reference_columns
 
 
 def _canonical_model_input(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:

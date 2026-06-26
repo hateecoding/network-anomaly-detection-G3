@@ -1,4 +1,4 @@
-import { requestJson } from "./api";
+import { ApiError, requestJson } from "./api";
 import type { AlertRecord, UploadAnalysisRow } from "../data/presentationData";
 
 const MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024;
@@ -240,7 +240,15 @@ export async function analyzeUploadedFile(file: File): Promise<UploadAnalysisRes
     });
 
     return mapUploadAnalysis(response);
-  } catch {
+  } catch (error) {
+    if (error instanceof ApiError && error.message.trim()) {
+      throw new Error(error.message);
+    }
+
+    if (error instanceof Error && error.message.trim()) {
+      throw error;
+    }
+
     throw new Error(
       "Analysis failed. Please check the uploaded file format or backend service.",
     );
