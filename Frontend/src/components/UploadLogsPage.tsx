@@ -61,6 +61,7 @@ export function UploadLogsPage({
   onSyncSuccess,
   onSyncFailure,
 }: UploadLogsPageProps) {
+  // Restores the latest real backend analysis so returning to this page does not reset the presentation.
   const [cachedAnalysis] = useState(() => loadCachedUploadAnalysis());
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState<UploadAnalysisResult | null>(cachedAnalysis);
@@ -101,6 +102,7 @@ export function UploadLogsPage({
 
   const filteredRows = sortRows(
     rows.filter((row) => {
+      // Filters operate on the returned preview rows; full-dataset totals remain in backend aggregates.
       const rowFilterKey =
         row.prediction === "Review Recommended" ? "review" : row.prediction.toLowerCase();
       const matchesFilter = filter === "all" || rowFilterKey === filter;
@@ -208,6 +210,7 @@ export function UploadLogsPage({
       }
     };
     void syncBackendStatus();
+    // Upload Logs only polls backend health; analysis runs exclusively when the user clicks Analyze.
     const timer = window.setInterval(() => void syncBackendStatus(), STANDARD_SYNC_INTERVAL_MS);
     return () => {
       active = false;
@@ -222,6 +225,7 @@ export function UploadLogsPage({
     }
     try {
       setState({ type: "loading", message: "Uploading and running model analysis..." });
+      // Backend returns capped rows plus full aggregate charts to avoid oversized browser responses.
       const result = await analyzeUploadedFile(selectedFile);
       setAnalysis(result);
       setRows(result.rows);
@@ -251,6 +255,7 @@ export function UploadLogsPage({
   };
 
   const handleClearResult = () => {
+    // Clearing the result also removes the shared Dashboard fallback cache.
     clearCachedUploadAnalysis();
     setAnalysis(null);
     setRows([]);
@@ -261,6 +266,7 @@ export function UploadLogsPage({
   };
 
   const resetFilters = (maximum = analysis?.metadata.totalRecords ?? 1) => {
+    // Reset returns chart/table filters to the complete analyzed row range reported by the backend.
     setQuery("");
     setFilter("all");
     setSort("priority");

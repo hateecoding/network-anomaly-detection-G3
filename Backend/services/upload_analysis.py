@@ -190,6 +190,7 @@ def _normalize_truth_label(value) -> int | None:
 
 
 def _extract_truth_labels(context_df: pd.DataFrame) -> list[int] | None:
+    # Accuracy-style model analysis is computed only when every uploaded row has a usable ground-truth label.
     candidates: list[int | None] = []
     for _, row in context_df.iterrows():
         label = _normalize_truth_label(row.get("label"))
@@ -262,6 +263,7 @@ def _build_model_analysis(
     context_df: pd.DataFrame,
     fallback_best_model: str,
 ) -> UploadModelAnalysis:
+    # Per-model upload metrics are dataset-derived; missing labels disable accuracy/precision/recall.
     truth = _extract_truth_labels(context_df)
     labels_available = truth is not None
     models: list[UploadModelAnalysisItem] = []
@@ -377,6 +379,7 @@ def analyze_upload_file(filename: str, contents: bytes) -> UploadAnalysisRespons
     try:
         processed_df, context_df = prepare_batch_input(raw_df)
     except ValueError as exc:
+        # Some UNSW-NB15 exports arrive headerless; retry only for the supported 49-column raw schema.
         suffix = Path(filename).suffix.lower()
         if suffix == ".json":
             raise
@@ -455,6 +458,7 @@ def analyze_upload_file(filename: str, contents: bytes) -> UploadAnalysisRespons
             best_result.result,
             float(best_result.attack_probability),
         )
+        # Review Recommended supports analyst triage and is not a third model class.
         display_counts[category] += 1
         normalized_protocol = _normalize_protocol(protocol)
         protocol_category_counts.setdefault(normalized_protocol, Counter())[category] += 1
@@ -499,6 +503,7 @@ def analyze_upload_file(filename: str, contents: bytes) -> UploadAnalysisRespons
             model_results=row_model_results,
         )
         if len(records) < MAX_RETURNED_RECORDS:
+            # Keep responses browser-safe while summaries and charts still use all uploaded rows.
             records.append(record)
 
         if category == "review_recommended" and len(review_recommended_rows) < 100:
@@ -649,6 +654,7 @@ def analyze_upload_file(filename: str, contents: bytes) -> UploadAnalysisRespons
 
 class UploadHistoryStore:
     def __init__(self):
+        # Runtime-only dashboard summary; App Runner redeploys or restarts reset these counters.
         self._total_records = 0
         self._total_review_recommended = 0
         self._total_attacks = 0

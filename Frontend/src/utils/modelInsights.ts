@@ -35,6 +35,7 @@ type BackendModelMetricsResponse = {
 };
 
 export async function fetchModelInsights(): Promise<ModelInsightsData> {
+  // The backend owns model recommendation metadata so the UI does not hardcode a "best" model.
   const response = await requestJson<BackendModelMetricsResponse>("/model-metrics");
 
   return {

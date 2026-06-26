@@ -12,6 +12,7 @@ def get_display_category(
     model_result: Literal["normal", "attack"],
     attack_probability: float,
 ) -> DisplayCategory:
+    # Review Recommended is a probability-threshold display category, not a third ML class.
     if model_result == "attack" or attack_probability >= ATTACK_THRESHOLD:
         return "attack"
     if attack_probability >= REVIEW_THRESHOLD:

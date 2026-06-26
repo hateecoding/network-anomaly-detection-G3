@@ -31,6 +31,7 @@ export async function requestJson<T>(
   const data: unknown = parseJson(rawBody);
 
   if (!response.ok) {
+    // Backend errors use a few shapes across FastAPI validation and custom handlers; normalize them for UI messages.
     throw new ApiError(getErrorMessage(data, response.status), response.status);
   }
 

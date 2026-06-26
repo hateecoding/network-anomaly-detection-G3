@@ -56,6 +56,7 @@ app = FastAPI(title="Anomaly Network Backend", version="1.0.0")
 
 
 def debug_endpoints_enabled() -> bool:
+    # Debug endpoints are useful for App Runner diagnosis but must stay opt-in in production.
     return os.getenv("ENABLE_DEBUG_ENDPOINTS", "false").strip().lower() in {
         "1",
         "true",
@@ -73,6 +74,7 @@ app.add_middleware(
 
 @app.middleware("http")
 async def track_visitor_activity(request: Request, call_next):
+    # Runtime visitor metrics are derived from real backend requests and reset on redeploy/restart.
     try:
         response = await call_next(request)
     except Exception:
@@ -91,6 +93,7 @@ def build_error_response(
     details: object | None = None,
     stage: str | None = None,
 ) -> JSONResponse:
+    # Keep API errors structured so the frontend can show precise messages without raw tracebacks.
     payload: dict[str, object] = {
         "error": code,
         "message": message,
@@ -212,6 +215,7 @@ def debug_models():
 
 @app.post("/predict", response_model=PredictionResponse)
 def predict(data: TrafficInput):
+    # Self-Test sends one harmonized traffic record through the same preprocessing/model path as uploads.
     response = predict_record(data)
     prediction_history.record(response)
     return response
@@ -219,6 +223,7 @@ def predict(data: TrafficInput):
 
 @app.post("/upload-log", response_model=UploadAnalysisResponse)
 async def upload_log(file: UploadFile = File(...)):
+    # Batch analysis validates the CSV, preprocesses all rows, but returns only a capped row preview.
     filename = file.filename or "upload.csv"
     print("UPLOAD_LOG_ENDPOINT_HIT", flush=True)
     print(f"UPLOAD_LOG_FILENAME filename={filename}", flush=True)
@@ -298,6 +303,7 @@ def model_metrics():
 
 @app.get("/dashboard-summary", response_model=DashboardSummaryResponse)
 def dashboard_summary():
+    # Dashboard state is in-memory backend runtime data; the frontend supplies local-cache fallback if empty.
     upload_summary = upload_history.get_summary()
     live_summary = visitor_tracker.get_live_visitors()
 
@@ -335,12 +341,14 @@ def alerts(limit: int = 25):
 
 @app.get("/live-visitors", response_model=LiveVisitorsResponse)
 def live_visitors(limit: int = 20):
+    # This endpoint intentionally reports the current runtime window, not permanent analytics history.
     limit = max(1, min(limit, 100))
     return visitor_tracker.get_live_visitors(limit=limit)
 
 
 @app.post("/track-visit")
 def track_visit(payload: TrackVisitInput, request: Request):
+    # Page-view pings store only anonymized runtime activity via VisitorTracker.
     visitor_tracker.record_frontend_visit(request=request, route=payload.route)
     return {
         "status": "recorded",

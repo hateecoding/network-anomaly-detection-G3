@@ -61,6 +61,7 @@ def _extract_client_ip(request: Request) -> str:
 
 
 def _anonymize_visitor(request: Request) -> str:
+    # Hash request context so Live Visitors can count activity without storing raw personal identifiers.
     raw_identity = "|".join(
         [
             _extract_client_ip(request),
@@ -83,6 +84,7 @@ def _normalize_frontend_route(route: str) -> str:
 
 class VisitorTracker:
     def __init__(self):
+        # Bounded in-memory storage keeps App Runner runtime monitoring lightweight and non-persistent.
         self._events: deque[dict[str, object]] = deque(maxlen=5000)
         self._lock = Lock()
 
@@ -149,6 +151,7 @@ class VisitorTracker:
             )
 
     def record_frontend_visit(self, request: Request, route: str) -> None:
+        # Frontend pings are treated as page-view activity, separate from raw backend route requests.
         now = utcnow()
         path = _normalize_frontend_route(route)
         visitor_id = _anonymize_visitor(request)

@@ -73,6 +73,7 @@ export function LiveVisitorsPage({
       }
 
       try {
+        // Live Visitors is runtime-only backend activity, refreshed from /live-visitors and /top-routes.
         const nextTraffic = await fetchLiveTrafficData();
         if (!active) {
           return;
@@ -98,6 +99,7 @@ export function LiveVisitorsPage({
     };
 
     void loadTraffic(true);
+    // Keep this page near real-time; backend stores only a short in-memory activity window.
     const timer = window.setInterval(
       () => void loadTraffic(false),
       LIVE_SYNC_INTERVAL_MS,

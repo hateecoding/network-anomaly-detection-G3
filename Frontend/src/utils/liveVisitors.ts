@@ -42,6 +42,7 @@ export type LiveTrafficData = {
 };
 
 export async function fetchLiveTrafficData(): Promise<LiveTrafficData> {
+  // These endpoints read backend runtime memory only; no upload cache or database is mixed into live activity.
   const [live, routes] = await Promise.all([
     requestJson<BackendLiveVisitorsResponse>("/live-visitors?limit=50"),
     requestJson<BackendTopRoutesResponse>("/top-routes?limit=10"),
@@ -66,6 +67,7 @@ export async function fetchLiveTrafficData(): Promise<LiveTrafficData> {
 }
 
 export async function trackFrontendVisit(route: string) {
+  // Sends only route/timestamp context; backend anonymizes the visitor identifier before storing it in memory.
   await requestJson<{ status: string }>("/track-visit", {
     method: "POST",
     headers: {

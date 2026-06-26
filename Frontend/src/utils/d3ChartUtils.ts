@@ -7,6 +7,7 @@ export function showChartTooltip(
   title: string,
   lines: string[],
 ) {
+  // A single shared tooltip avoids each chart owning duplicate floating DOM.
   const tooltip = getTooltip();
   tooltip.replaceChildren();
 
@@ -61,6 +62,7 @@ export function exportElementAsPng(element: HTMLElement, filename: string) {
   const clone = element.cloneNode(true) as HTMLElement;
 
   clone.querySelectorAll("[data-export-hidden='true']").forEach((item) => item.remove());
+  // Inline computed styles so exported SVG/PNG keeps the dark dashboard styling outside the live DOM.
   inlineComputedStyles(element, clone);
 
   clone.style.width = `${width}px`;
@@ -125,6 +127,7 @@ export function animatePathDraw(
   selection: d3.Selection<SVGPathElement, unknown, null, undefined>,
   duration = 650,
 ) {
+  // Line charts use stroke-dash animation to make refreshed data feel intentional without changing values.
   selection.each(function animate() {
     const length = this.getTotalLength();
     d3.select(this)

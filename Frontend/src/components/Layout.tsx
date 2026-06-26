@@ -31,11 +31,11 @@ const pageHeadings: Record<PageId, { title: string; subtitle: string }> = {
   },
   upload: {
     title: "Upload Logs",
-    subtitle: "Batch network traffic analysis with AI prediction and explainability.",
+    subtitle: "Batch network traffic analysis with AI prediction and dataset insights.",
   },
   visitors: {
     title: "Live Visitors",
-    subtitle: "Track website visitors, flagged request bursts, route pressure, and recent activity.",
+    subtitle: "Track backend request activity, page-view pings, route pressure, and recent activity.",
   },
   "model-insights": {
     title: "Model Insights",
@@ -72,6 +72,7 @@ export function Layout({
   );
   const [now, setNow] = useState(new Date());
 
+  // Keeps the clock and sync labels feeling live without coupling them to page polling.
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
@@ -79,6 +80,7 @@ export function Layout({
 
   const heading = pageHeadings[activePage];
   const toggleSidebar = () => {
+    // Persisting the rail state gives Upload Logs more horizontal space after refresh/navigation.
     setSidebarCollapsed((current) => {
       const next = !current;
       saveSidebarCollapsedPreference(next);
@@ -300,6 +302,7 @@ function loadSidebarCollapsedPreference(activePage: PageId) {
     // Storage can be unavailable in private or restricted browser contexts.
   }
 
+  // Upload Logs is chart-heavy, so a first-time visitor gets the space-saving rail by default.
   return activePage === "upload";
 }
 

@@ -234,6 +234,7 @@ export async function analyzeUploadedFile(file: File): Promise<UploadAnalysisRes
   formData.append("file", file);
 
   try {
+    // /upload-log is the single production batch-analysis path; the frontend never fabricates chart values.
     const response = await requestJson<BackendUploadResponse>("/upload-log", {
       method: "POST",
       body: formData,
@@ -264,6 +265,7 @@ export function loadCachedUploadAnalysis(): UploadAnalysisResult | null {
 
     const cached: unknown = JSON.parse(raw);
     if (!isCompatibleCacheEntry(cached)) {
+      // Cache shape is versioned so old oversized or incompatible payloads cannot break the dashboard.
       clearCachedUploadAnalysis();
       return null;
     }
@@ -280,6 +282,7 @@ export function loadCachedUploadAnalysis(): UploadAnalysisResult | null {
 
 export function saveCachedUploadAnalysis(result: UploadAnalysisResult): boolean {
   try {
+    // Cache only the capped backend preview, not the original CSV, to keep browser storage small and presentation-safe.
     const cacheEntry = {
       version: UPLOAD_ANALYSIS_CACHE_VERSION,
       savedAt: new Date().toISOString(),
@@ -459,6 +462,7 @@ function isCompatibleCacheEntry(
 }
 
 function mapUploadAnalysis(response: BackendUploadResponse): UploadAnalysisResult {
+  // Normalize snake_case API responses into UI-friendly camelCase objects shared by Upload Logs and Dashboard.
   const rows = buildPreviewRows(response.records.map((record) => mapUploadRow(record)));
   const alerts = response.alerts.map((alert, index) => mapUploadAlert(alert, index));
   const attackRecords = response.chart_data.trend.reduce((total, point) => total + point.attack, 0);

@@ -63,6 +63,7 @@ class JsonFittedPreprocessor:
         return np.asarray(self.feature_names, dtype=object)
 
     def transform(self, frame: pd.DataFrame) -> np.ndarray:
+        # Mirrors the exported Assignment 2 fitted imputer/scaler/encoder without needing the original notebook object.
         numeric = frame[self.numeric_features].apply(
             pd.to_numeric,
             errors="coerce",
@@ -448,6 +449,7 @@ def _resolve_preprocessor_path() -> Path | None:
 
 @lru_cache(maxsize=1)
 def load_fitted_preprocessor() -> tuple[Any | None, Path | None]:
+    # Prefer the fitted preprocessing artifact; manual alignment is only a transparent fallback.
     path = _resolve_preprocessor_path()
     if path is None:
         LOGGER.error(FALLBACK_WARNING)
@@ -560,6 +562,7 @@ def _text_series(
 
 
 def _validate_raw_network_input(raw_df: pd.DataFrame) -> None:
+    # Accept full harmonized datasets and simple KDD-style traffic, but reject label/category mapping files.
     cleaned_df = clean_column_names(raw_df)
     source_lookup = _build_source_lookup(cleaned_df)
     if _looks_like_label_mapping_file(set(source_lookup)):
@@ -620,6 +623,7 @@ def _validate_raw_network_input(raw_df: pd.DataFrame) -> None:
 
 
 def _looks_like_label_mapping_file(columns: set[str]) -> bool:
+    # Mapping/reference files often contain labels/categories only and should not reach model inference.
     if not columns:
         return False
 
@@ -659,6 +663,7 @@ def _looks_like_label_mapping_file(columns: set[str]) -> bool:
 
 
 def _canonical_model_input(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    # Maps raw UNSW/KDD aliases into the 15 harmonized fields used before final model encoding.
     cleaned_df = clean_column_names(raw_df)
     source_lookup = _build_source_lookup(cleaned_df)
 
@@ -742,6 +747,7 @@ def _canonical_model_input(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataF
         FIELD_ALIASES["destination_host_count"],
     )
     if destination_host_count is None and "count" in source_lookup:
+        # Simple KDD files do not include dst_host_count; count is the safest available activity proxy.
         destination_host_count = cleaned_df[source_lookup["count"]]
     model_input_df["destination_host_count"] = (
         safe_numeric(destination_host_count).fillna(model_input_df["activity_count"])
@@ -755,6 +761,7 @@ def _canonical_model_input(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataF
         FIELD_ALIASES["destination_host_service_count"],
     )
     if destination_host_service_count is None and "srv_count" in source_lookup:
+        # Simple KDD files do not include dst_host_srv_count; srv_count preserves service activity signal.
         destination_host_service_count = cleaned_df[source_lookup["srv_count"]]
     model_input_df["destination_host_service_count"] = (
         safe_numeric(destination_host_service_count).fillna(model_input_df["service_count"])
@@ -926,6 +933,7 @@ def _canonical_model_input(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataF
 
 
 def align_features(df_incoming: pd.DataFrame) -> pd.DataFrame:
+    # Final guardrail: add missing one-hot columns, drop extras, and enforce feature_columns.json order.
     expected_features = get_feature_columns()
     aligned_df = df_incoming.copy()
 
@@ -937,6 +945,7 @@ def align_features(df_incoming: pd.DataFrame) -> pd.DataFrame:
 
 
 def encode_features(model_input_df: pd.DataFrame) -> pd.DataFrame:
+    # Manual fallback encoder exists only for resilience when the fitted pipeline artifact is unavailable.
     encoded_df = pd.DataFrame(index=model_input_df.index)
 
     for column in NUMERIC_FEATURES:
@@ -962,6 +971,7 @@ def apply_known_headerless_schema(raw_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def prepare_batch_input(raw_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    # Upload and Self-Test both pass through this function so preprocessing stays consistent.
     _validate_raw_network_input(raw_df)
     model_input_df, context_df = _canonical_model_input(raw_df)
 

@@ -197,6 +197,7 @@ export function D3RiskTrendChart({
       .translateExtent([[margin.left, 0], [width - margin.right, height]])
       .extent([[margin.left, margin.top], [width - margin.right, plotBottom]])
       .on("zoom", (event) => {
+        // Zoom/pan changes the visible scale only; source data and table filters remain unchanged.
         const transformedX = event.transform.rescaleX(baseX);
         updateXAxis(transformedX);
         bars.attr("x", (_point, index) => transformedX(index) - barWidth / 2);

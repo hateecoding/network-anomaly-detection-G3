@@ -55,6 +55,7 @@ const fieldConfig: Record<NumericField, { label: string; description: string; ma
   destinationHostServiceCount: { label: "Destination host service count", description: "Recent destination connections using the same service." },
 };
 
+// A valid normal-like sample keeps demonstrations one click away while still calling the real /predict endpoint.
 const initialInput: PredictionFormInput = {
   duration: "1.2",
   srcBytes: "1200",
@@ -73,6 +74,7 @@ const initialInput: PredictionFormInput = {
   connectionDetail: "sf",
 };
 
+// This sample is intentionally higher-risk, but the backend still decides the final model result.
 const attackLikeInput: PredictionFormInput = {
   duration: "0.00001",
   srcBytes: "1762",
@@ -125,6 +127,7 @@ export function SelfTestPage({
   const statusTone = status.type === "idle" ? "info" : status.type;
 
   useEffect(() => {
+    // Defensive restore for browsers/session states that may hydrate an empty form.
     if (isBlankInput(input)) {
       setInput(initialInput);
       setTouched({});
@@ -327,6 +330,7 @@ function TextInput({ error, label, value, onChange }: { error?: string; label: s
 }
 
 function validateInput(input: PredictionFormInput) {
+  // Validate the same 15 harmonized features accepted by the backend TrafficInput schema.
   const errors: Partial<Record<FormField, string>> = {};
   for (const field of numericFields) {
     const rawValue = input[field].trim();

@@ -123,6 +123,7 @@ def build_prediction_response(
     best_model_metrics: ModelPerformanceMetrics | None,
     model_results: dict[str, ModelPredictionResult],
 ) -> PredictionResponse:
+    # The public prediction response exposes the selected model plus per-model results for transparency.
     best_result = model_results[best_model]
 
     return PredictionResponse(
@@ -173,6 +174,7 @@ def build_s3_key(filename: str, *, env_var: str | None = None) -> str:
 
 
 def download_s3_artifact(filename: str, *, env_var: str | None = None) -> Path | None:
+    # App Runner downloads artifacts into /tmp; cached model loaders avoid repeat downloads per request.
     bucket = get_s3_bucket()
     if not bucket:
         return None
@@ -436,6 +438,7 @@ def summarize_deserialization(model_path: Path, serializer: str) -> dict[str, An
 
 
 def deserialize_model(model_name: str, model_path: Path) -> Any:
+    # Support pickle/joblib because historical notebooks may have serialized models with either library.
     file_size = model_path.stat().st_size
     errors: list[str] = []
 
@@ -489,6 +492,7 @@ def deserialize_model(model_name: str, model_path: Path) -> Any:
 
 @lru_cache(maxsize=1)
 def load_models() -> dict[str, Any]:
+    # Load all available models once; optional artifacts are skipped with diagnostics instead of breaking startup.
     models: dict[str, Any] = {}
     load_errors: list[str] = []
 
@@ -580,6 +584,7 @@ def _extract_metric_value(metrics: dict[str, Any] | None, metric_name: str | Non
 def resolve_best_model_name(
     available_models: list[str],
 ) -> tuple[str, str | None, ModelPerformanceMetrics | None]:
+    # Model metadata drives recommendation; XGBoost is only the fallback when metrics are unavailable.
     if not available_models:
         raise ValueError("No loaded models are available for prediction.")
 
@@ -618,6 +623,7 @@ def predict_with_model(
     model: Any,
     processed_df: pd.DataFrame,
 ) -> list[ModelPredictionResult]:
+    # Probability output is preferred; Isolation Forest uses anomaly scores converted to a bounded probability.
     model_input = processed_df.to_numpy()
     raw_predictions = list(model.predict(model_input))
 
@@ -649,6 +655,7 @@ def predict_with_model(
 
 
 def predict_processed_frame(processed_df: pd.DataFrame) -> dict[str, Any]:
+    # Batch prediction runs every loaded model on the already aligned 67-feature dataframe.
     loaded_models = load_models()
     available_models = [model_name for model_name in MODEL_ORDER if model_name in loaded_models]
     print(

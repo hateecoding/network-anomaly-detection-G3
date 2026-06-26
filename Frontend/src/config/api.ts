@@ -9,5 +9,6 @@ export const API_BASE_URL = normalizeBaseUrl(
 );
 
 export function buildApiUrl(path: string) {
+  // Centralizes the App Runner base URL so components never hardcode production endpoints.
   return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 }

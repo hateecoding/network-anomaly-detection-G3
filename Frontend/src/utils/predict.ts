@@ -34,6 +34,7 @@ type BackendPredictionResponse = {
 export async function predictNetworkSample(
   input: PredictionInput,
 ): Promise<PredictionResult> {
+  // Maps the demo form's camelCase fields into the FastAPI /predict schema used by the model pipeline.
   const response = await requestJson<BackendPredictionResponse>("/predict", {
     method: "POST",
     headers: {
@@ -71,7 +72,7 @@ export async function predictNetworkSample(
     score: Math.round(attackProbability * 100),
     confidence: Math.round(confidence * 100),
     explanation:
-      "This is a probability-based model result. Per-feature contribution evidence is not available until a fitted explainability artifact is deployed.",
+      "This is a probability-based model result. Per-feature contribution evidence is not included in the deployed response.",
   };
 }
 

@@ -39,6 +39,7 @@ export function DashboardPage({
       requestInFlight = true;
 
       try {
+        // fetchDashboardBackendData applies the backend-first, local-cache-second dashboard policy.
         const data = await fetchDashboardBackendData();
         if (!active) {
           return;
@@ -66,6 +67,7 @@ export function DashboardPage({
     };
 
     void loadDashboard();
+    // Standard pages refresh less aggressively than Live Visitors to avoid unnecessary backend pressure.
     const timer = window.setInterval(() => void loadDashboard(), STANDARD_SYNC_INTERVAL_MS);
 
     return () => {

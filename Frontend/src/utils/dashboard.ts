@@ -81,6 +81,7 @@ export async function fetchDashboardBackendData(): Promise<DashboardBackendData>
   const cachedAnalysis = loadCachedUploadAnalysis();
 
   try {
+    // Dashboard is backend-first; local upload cache is only used when the backend has no upload summary.
     const [summary, alerts, routes] = await Promise.all([
       requestJson<BackendDashboardSummary>("/dashboard-summary"),
       requestJson<BackendAlertsResponse>("/alerts?limit=4"),
@@ -89,6 +90,7 @@ export async function fetchDashboardBackendData(): Promise<DashboardBackendData>
 
     const backendData = mapBackendDashboardData(summary, alerts, routes);
     if (!hasUploadActivity(backendData) && cachedAnalysis) {
+      // Preserves the latest Upload Logs result across page navigation without inventing fallback metrics.
       return mergeCachedUploadWithBackend(cachedAnalysis, backendData);
     }
 
@@ -224,6 +226,7 @@ function mergeCachedUploadWithBackend(
 function mapCachedUploadDashboardData(
   analysis: UploadAnalysisResult,
 ): DashboardBackendData {
+  // This fallback reads the same localStorage entry written by Upload Logs after a successful /upload-log.
   const { summary } = analysis;
   return {
     source: "cache",

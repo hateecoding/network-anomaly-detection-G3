@@ -26,6 +26,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // Page-view pings feed the backend runtime visitor tracker; failures should never block navigation.
     void trackFrontendVisit(getTrackedRoute(activePage)).catch(() => undefined);
     setSyncStatus("syncing");
   }, [activePage]);

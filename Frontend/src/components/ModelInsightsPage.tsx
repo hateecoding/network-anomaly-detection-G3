@@ -89,6 +89,7 @@ export function ModelInsightsPage({
       requestInFlight = true;
 
       try {
+        // Model Insights shows backend metadata/historical evaluation, not live accuracy from the latest upload.
         const nextData = await fetchModelInsights();
         if (!active) {
           return;
@@ -116,6 +117,7 @@ export function ModelInsightsPage({
     };
 
     void loadModelInsights();
+    // Refresh metadata periodically so redeployed model artifacts are reflected without a page reload.
     const timer = window.setInterval(
       () => void loadModelInsights(),
       STANDARD_SYNC_INTERVAL_MS,
