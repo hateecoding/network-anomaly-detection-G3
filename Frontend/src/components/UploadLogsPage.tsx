@@ -36,7 +36,6 @@ import { StatusBadge } from "./StatusBadge";
 import { UploadBox } from "./UploadBox";
 
 const pageSizeOptions = [25, 50, 100] as const;
-const EXPLANATION_PANEL_STORAGE_KEY = "aegis-net.upload-explanation-expanded";
 type FilterOption = "all" | "attack" | "review" | "normal";
 type SortOption = "priority" | "record" | "confidence" | "attackProbability";
 
@@ -78,9 +77,6 @@ export function UploadLogsPage({
   const [selectedRow, setSelectedRow] = useState<number | null>(
     cachedAnalysis?.rows[0]?.recordNumber ?? null,
   );
-  const [explanationExpanded, setExplanationExpanded] = useState(() =>
-    loadExplanationPreference(Boolean(cachedAnalysis?.rows[0])),
-  );
   const [xFeature, setXFeature] = useState<ScatterFeature>("totalBytes");
   const [yFeature, setYFeature] = useState<ScatterFeature>("duration");
   const [pageSize, setPageSize] = useState<(typeof pageSizeOptions)[number]>(25);
@@ -97,7 +93,6 @@ export function UploadLogsPage({
 
   const deferredQuery = useDeferredValue(query);
   const hasAnalysis = analysis !== null;
-  const selectedRecord = rows.find((row) => row.recordNumber === selectedRow) ?? null;
   const estimatedAverageAttackProbability = analysis
     ? estimateAverageProbability(analysis.charts.probabilityBuckets)
     : 0;
@@ -135,7 +130,6 @@ export function UploadLogsPage({
 
   const selectRow = (recordNumber: number) => {
     setSelectedRow(recordNumber);
-    setExplanationExpanded(true);
   };
 
   const columns: DataColumn<UploadAnalysisRow>[] = [
@@ -188,10 +182,6 @@ export function UploadLogsPage({
   ]);
 
   useEffect(() => {
-    saveExplanationPreference(explanationExpanded);
-  }, [explanationExpanded]);
-
-  useEffect(() => {
     if (analysis) {
       setRowEnd(analysis.metadata.totalRecords);
       setSelectedRow((current) => current ?? rows[0]?.recordNumber ?? null);
@@ -236,9 +226,6 @@ export function UploadLogsPage({
       setAnalysis(result);
       setRows(result.rows);
       setSelectedRow(result.rows[0]?.recordNumber ?? null);
-      if (result.rows.length > 0) {
-        setExplanationExpanded(true);
-      }
       setRowStart(1);
       setRowEnd(result.metadata.totalRecords);
       setProbabilityMin(0);
@@ -322,7 +309,7 @@ export function UploadLogsPage({
 
   return (
     <div className="upload-dashboard-page">
-      <div className={`upload-investigation-layout ${explanationExpanded ? "" : "upload-investigation-layout-explanation-collapsed"}`}>
+      <div className="upload-investigation-layout">
         <div className="upload-investigation-main">
           <section className="panel upload-command-card">
             <div className="upload-command-main">
@@ -463,7 +450,6 @@ export function UploadLogsPage({
                   <button type="button" className="upload-analysis-tab" onClick={() => document.getElementById("upload-feature-explorer")?.scrollIntoView({ behavior: "smooth", block: "center" })}>Feature Explorer</button>
                   <button type="button" className="upload-analysis-tab" onClick={() => document.getElementById("upload-protocol-risk")?.scrollIntoView({ behavior: "smooth", block: "center" })}>Protocol Risk</button>
                   <button type="button" className="upload-analysis-tab" onClick={() => document.getElementById("upload-probability")?.scrollIntoView({ behavior: "smooth", block: "center" })}>Probability</button>
-                  <button type="button" className="upload-analysis-tab" onClick={() => document.getElementById("upload-explanation")?.scrollIntoView({ behavior: "smooth", block: "start" })}>Explainability</button>
                 </nav>
                 <div className="upload-chart-grid upload-chart-grid-primary">
                   <div id="upload-overview" className="upload-chart-cell">
@@ -631,144 +617,8 @@ export function UploadLogsPage({
           ) : null}
         </div>
 
-        <aside id="upload-explanation" className={`upload-explanation-rail ${explanationExpanded ? "" : "upload-explanation-rail-collapsed"}`}>
-          <ExplanationPanel
-            row={selectedRecord}
-            expanded={explanationExpanded}
-            onToggle={() => setExplanationExpanded((current) => !current)}
-          />
-        </aside>
       </div>
     </div>
-  );
-}
-
-function ExplanationPanel({
-  row,
-  expanded,
-  onToggle,
-}: {
-  row: UploadAnalysisRow | null;
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  if (!expanded) {
-    const compactCategory = row?.prediction === "Review Recommended" ? "Review" : row?.prediction;
-    return (
-      <section
-        className="panel explanation-panel explanation-panel-collapsed"
-        role="button"
-        tabIndex={0}
-        aria-label="Expand prediction explanation panel"
-        onClick={onToggle}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            onToggle();
-          }
-        }}
-      >
-        <button
-          type="button"
-          className="explanation-toggle-button explanation-expand-button"
-          aria-label="Expand prediction explanation"
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggle();
-          }}
-        >
-          ‹
-        </button>
-        <div className="collapsed-explanation-copy">
-          <span>Prediction Explanation</span>
-          {row ? (
-            <>
-              <strong>{row.rowId}</strong>
-              <small className={`collapsed-explanation-badge collapsed-explanation-${row.prediction === "Attack" ? "attack" : row.prediction === "Review Recommended" ? "review" : "normal"}`}>
-                {compactCategory}
-              </small>
-            </>
-          ) : (
-            <small>Details</small>
-          )}
-        </div>
-      </section>
-    );
-  }
-
-  if (!row) {
-    return (
-      <section className="panel explanation-panel">
-        <div className="explanation-panel-heading">
-          <p className="eyebrow">Prediction explanation</p>
-          <button type="button" className="explanation-toggle-button" aria-label="Collapse prediction explanation" onClick={onToggle}>›</button>
-        </div>
-        <h3>No row selected</h3>
-        <p className="chart-note">Select a chart point or table row to inspect its model output and traffic context.</p>
-      </section>
-    );
-  }
-
-  const action = row.prediction === "Attack"
-    ? "Escalate this record for immediate investigation."
-    : row.prediction === "Review Recommended"
-      ? "Review this connection pattern and related activity."
-      : "No immediate action is required; continue monitoring.";
-
-  return (
-    <section className="panel explanation-panel">
-      <div className="explanation-panel-heading">
-        <div>
-          <p className="eyebrow">Prediction explanation</p>
-          <h3>{row.rowId}</h3>
-        </div>
-        <div className="explanation-heading-actions">
-          <StatusBadge label={row.prediction} tone={row.prediction === "Attack" ? "attack" : row.prediction === "Review Recommended" ? "suspicious" : "normal"} />
-          <button type="button" className="explanation-toggle-button" aria-label="Collapse prediction explanation" onClick={onToggle}>›</button>
-        </div>
-      </div>
-
-      <div className="explanation-metrics">
-        <ExplanationMetric label="Model prediction" value={row.modelPrediction.toUpperCase()} />
-        <ExplanationMetric label="Display category" value={row.prediction} />
-        <ExplanationMetric label="Attack probability" value={`${row.attackProbability}%`} />
-        <ExplanationMetric label="Confidence" value={`${row.confidence}%`} />
-      </div>
-
-      <div className="explanation-callout">
-        <span>Recommended action</span>
-        <strong>{action}</strong>
-      </div>
-
-      <div className="explanation-section">
-        <h4>Top contributing features</h4>
-        <div className="contribution-unavailable">
-          Model-derived feature contributions were not returned by the backend. No SHAP or contribution values are inferred.
-        </div>
-      </div>
-
-      <div className="explanation-section">
-        <h4>Traffic feature context</h4>
-        <div className="feature-context-list">
-          <FeatureContext label="Total bytes" value={row.totalBytes} />
-          <FeatureContext label="Byte ratio" value={row.byteRatio} />
-          <FeatureContext label="Activity count" value={row.activityCount} />
-          <FeatureContext label="Service count" value={row.serviceCount} />
-          <FeatureContext label="Duration" value={row.duration} />
-        </div>
-      </div>
-
-      <div className="explanation-section">
-        <h4>Operational interpretation</h4>
-        <p>
-          The binary model returned <strong>{row.modelPrediction}</strong>. The application display category is <strong>{row.prediction}</strong> based on the returned attack probability and configured review thresholds.
-        </p>
-      </div>
-
-      <div className="explanation-footnote">
-        This panel uses real model output and observed traffic values. Feature contribution evidence is shown only when supplied by the backend.
-      </div>
-    </section>
   );
 }
 
@@ -867,14 +717,6 @@ function ChartInsightCard({
   );
 }
 
-function ExplanationMetric({ label, value }: { label: string; value: string }) {
-  return <div><span>{label}</span><strong>{value}</strong></div>;
-}
-
-function FeatureContext({ label, value }: { label: string; value: number }) {
-  return <div><span>{label}</span><strong>{value.toLocaleString(undefined, { maximumFractionDigits: 3 })}</strong></div>;
-}
-
 function MetaItem({ label, value }: { label: string; value: string }) {
   return <div className="result-meta-item"><span>{label}</span><strong>{value}</strong></div>;
 }
@@ -957,26 +799,4 @@ function buildProtocolInsight(analysis: UploadAnalysisResult) {
 function clamp(value: number, minimum: number, maximum: number) {
   if (!Number.isFinite(value)) return minimum;
   return Math.min(maximum, Math.max(minimum, value));
-}
-
-function loadExplanationPreference(defaultValue: boolean) {
-  try {
-    const savedPreference = window.localStorage.getItem(
-      EXPLANATION_PANEL_STORAGE_KEY,
-    );
-    return savedPreference === null ? defaultValue : savedPreference === "true";
-  } catch {
-    return defaultValue;
-  }
-}
-
-function saveExplanationPreference(expanded: boolean) {
-  try {
-    window.localStorage.setItem(
-      EXPLANATION_PANEL_STORAGE_KEY,
-      String(expanded),
-    );
-  } catch {
-    // Storage can be unavailable in private or restricted browser contexts.
-  }
 }
