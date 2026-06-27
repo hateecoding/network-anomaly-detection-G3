@@ -548,15 +548,28 @@ button {
 }
 
 .summary-card-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  width: 100%;
+  min-width: 0;
 }
 
 .summary-card p {
+  min-width: 0;
   margin: 0;
   color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.summary-card-header .status-badge {
+  justify-self: end;
+  flex: none;
+  max-width: 100%;
+  padding: 6px 8px;
+  white-space: nowrap;
+  font-size: clamp(0.62rem, 0.65vw, 0.72rem);
 }
 
 .summary-card strong {
@@ -588,6 +601,27 @@ button {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
   gap: 20px;
   min-width: 0;
+}
+
+.dashboard-page .analytics-grid > .panel {
+  min-width: 0;
+}
+
+.dashboard-page .chart-action-row {
+  flex-wrap: wrap;
+}
+
+.dashboard-page .chart-action-buttons {
+  flex-wrap: wrap;
+}
+
+.dashboard-page .dashboard-trend-chart .d3-chart {
+  width: 100%;
+  min-width: 0;
+}
+
+.dashboard-page .pie-chart-wrap {
+  margin-inline: auto;
 }
 
 .dashboard-lower-grid {

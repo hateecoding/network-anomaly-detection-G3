@@ -91,7 +91,7 @@ export function DashboardPage({
     : null;
 
   return (
-    <div className="page-grid">
+    <div className="page-grid dashboard-page">
       <div className="hero-note panel">
         <div>
           <p className="eyebrow">AI Security Operations</p>

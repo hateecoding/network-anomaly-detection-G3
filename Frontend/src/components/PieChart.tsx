@@ -55,13 +55,17 @@ export function PieChart({
       .arc<d3.PieArcDatum<PieSegment>>()
       .innerRadius(radius * 0.62)
       .outerRadius(radius - 6);
+    const hoverArc = d3
+      .arc<d3.PieArcDatum<PieSegment>>()
+      .innerRadius(radius * 0.6)
+      .outerRadius(radius - 1);
 
     const total = segments.reduce((sum, segment) => sum + segment.value, 0);
     const collapsedArc = d3
       .arc<d3.PieArcDatum<PieSegment>>()
       .innerRadius(radius * 0.62)
       .outerRadius(radius * 0.62);
-    group
+    const paths = group
       .selectAll("path")
       .data(pie(segments))
       .enter()
@@ -74,17 +78,39 @@ export function PieChart({
         selectedLabel && selectedLabel !== item.data.label ? 0.35 : 1
       )
       .style("cursor", onSelect ? "pointer" : "default")
-      .on("pointerenter", (event: PointerEvent, item) => {
+      .on("pointerenter", function (event: PointerEvent, item) {
         const percentage = total > 0 ? (item.data.value / total) * 100 : 0;
-        showChartTooltip(event, item.data.label, [
-          `${item.data.value.toLocaleString()} records`,
-          `${percentage.toFixed(1)}% of analysed traffic`,
-          "Click to filter the workspace",
+        paths.interrupt().transition().duration(160).attr("opacity", (candidate) =>
+          candidate.data.label === item.data.label ? 1 : 0.42
+        );
+        d3.select<SVGPathElement, d3.PieArcDatum<PieSegment>>(this)
+          .raise()
+          .interrupt()
+          .transition()
+          .duration(180)
+          .attr("d", (datum) => hoverArc(datum) ?? "");
+        showChartTooltip(event, "Prediction distribution", [
+          `Category: ${item.data.label}`,
+          `Count: ${item.data.value.toLocaleString()}`,
+          `Percentage: ${percentage.toFixed(1)}%`,
+          ...(onSelect ? ["Click to filter the workspace"] : []),
         ]);
       })
       .on("pointermove", (event: PointerEvent) => moveChartTooltip(event))
-      .on("pointerleave", hideChartTooltip)
-      .on("click", (_event: MouseEvent, item) => onSelect?.(item.data.label))
+      .on("pointerleave", function () {
+        hideChartTooltip();
+        paths.interrupt().transition().duration(180).attr("opacity", (item) =>
+          selectedLabel && selectedLabel !== item.data.label ? 0.35 : 1
+        );
+        d3.select<SVGPathElement, d3.PieArcDatum<PieSegment>>(this)
+          .interrupt()
+          .transition()
+          .duration(180)
+          .attr("d", (datum) => arc(datum) ?? "");
+      })
+      .on("click", (_event: MouseEvent, item) => onSelect?.(item.data.label));
+
+    paths
       .transition()
       .duration(650)
       .ease(d3.easeCubicOut)

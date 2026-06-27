@@ -1,5 +1,12 @@
 import { useEffect, useRef } from "react";
 import * as d3 from "d3";
+import {
+  animatePathDraw,
+  exportChartCardAsPng,
+  hideChartTooltip,
+  moveChartTooltip,
+  showChartTooltip,
+} from "../utils/d3ChartUtils";
 
 type DataPoint = {
   label: string;
@@ -18,103 +25,217 @@ type LineChartProps = {
   height?: number;
 };
 
-export function LineChart({ series, height = 260 }: LineChartProps) {
+export function LineChart({ series, height = 320 }: LineChartProps) {
   const ref = useRef<SVGSVGElement | null>(null);
-  const width = 560;
-  const margin = { top: 14, right: 18, bottom: 30, left: 42 };
+  const zoomRef = useRef<d3.ZoomBehavior<SVGGElement, unknown> | null>(null);
+  const zoomTargetRef = useRef<SVGGElement | null>(null);
 
   useEffect(() => {
-    if (!ref.current || series.length === 0) {
-      return;
-    }
+    if (!ref.current || series.length === 0) return;
+
+    const width = 760;
+    const margin = { top: 20, right: 24, bottom: 72, left: 58 };
+    const plotWidth = width - margin.left - margin.right;
+    const plotHeight = height - margin.top - margin.bottom;
+    const labels = series[0]?.values.map((item) => item.label) ?? [];
+    if (labels.length === 0) return;
 
     const svg = d3.select(ref.current);
     svg.selectAll("*").remove();
     svg.attr("viewBox", `0 0 ${width} ${height}`);
 
-    const labels = series[0]?.values.map((item) => item.label) ?? [];
-    const maxValue =
+    const maximumIndex = Math.max(1, labels.length - 1);
+    const maximumValue =
       d3.max(series.flatMap((item) => item.values.map((point) => point.value))) ?? 1;
-
-    const xScale = d3
-      .scalePoint()
-      .domain(labels)
-      .range([margin.left, width - margin.right]);
-
-    const yScale = d3
+    const baseX = d3.scaleLinear().domain([0, maximumIndex]).range([0, plotWidth]);
+    const y = d3
       .scaleLinear()
-      .domain([0, maxValue * 1.15 || 1])
+      .domain([0, maximumValue * 1.15 || 1])
       .nice()
-      .range([height - margin.bottom, margin.top]);
+      .range([plotHeight, 0]);
 
-    const grid = svg.append("g");
-    yScale.ticks(4).forEach((tick: number) => {
-      grid
-        .append("line")
+    const clipId = `dashboard-trend-clip-${Math.random().toString(36).slice(2)}`;
+    svg.append("defs").append("clipPath").attr("id", clipId)
+      .append("rect")
+      .attr("width", plotWidth)
+      .attr("height", plotHeight);
+
+    const frame = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+    zoomTargetRef.current = frame.node();
+    frame.append("rect")
+      .attr("width", plotWidth)
+      .attr("height", plotHeight)
+      .attr("fill", "transparent")
+      .style("cursor", "grab");
+
+    const grid = frame.append("g");
+    y.ticks(5).forEach((tick) => {
+      grid.append("line")
         .attr("class", "d3-grid-line")
-        .attr("x1", margin.left)
-        .attr("x2", width - margin.right)
-        .attr("y1", yScale(tick))
-        .attr("y2", yScale(tick));
+        .attr("x1", 0)
+        .attr("x2", plotWidth)
+        .attr("y1", y(tick))
+        .attr("y2", y(tick));
     });
 
-    const xAxis = d3.axisBottom(xScale).tickSize(0);
-    const yAxis = d3.axisLeft(yScale).ticks(4).tickSize(0);
-
-    svg
-      .append("g")
+    const plot = frame.append("g").attr("clip-path", `url(#${clipId})`);
+    const xAxis = frame.append("g")
+      .attr("class", "d3-axis dashboard-trend-x-axis")
+      .attr("transform", `translate(0,${plotHeight})`);
+    frame.append("g")
       .attr("class", "d3-axis")
-      .attr("transform", `translate(0,${height - margin.bottom})`)
-      .call(xAxis)
-      .call((group: any) => group.select(".domain").remove());
+      .call(d3.axisLeft(y).ticks(5).tickSize(0).tickPadding(10))
+      .call((group) => group.select(".domain").remove());
 
-    svg
-      .append("g")
-      .attr("class", "d3-axis")
-      .attr("transform", `translate(${margin.left},0)`)
-      .call(yAxis)
-      .call((group: any) => group.select(".domain").remove());
+    const pathBySeries = new Map<string, d3.Selection<SVGPathElement, DataPoint[], null, undefined>>();
+    const pointsBySeries = new Map<string, d3.Selection<SVGCircleElement, DataPoint, SVGGElement, unknown>>();
 
-    const lineBuilder = d3
+    const buildLine = (scale: d3.ScaleLinear<number, number>) => d3
       .line<DataPoint>()
-      .x((point: DataPoint) => xScale(point.label) ?? margin.left)
-      .y((point: DataPoint) => yScale(point.value))
+      .x((_point, index) => scale(index))
+      .y((point) => y(point.value))
       .curve(d3.curveMonotoneX);
 
     series.forEach((item) => {
-      svg
-        .append("path")
+      const path = plot.append("path")
         .datum(item.values)
         .attr("class", "d3-line-path")
         .attr("fill", "none")
         .attr("stroke", item.color)
         .attr("stroke-width", 2.5)
-        .attr("d", lineBuilder);
+        .attr("d", buildLine(baseX));
+      animatePathDraw(path as d3.Selection<SVGPathElement, unknown, null, undefined>, 650);
+      pathBySeries.set(item.key, path);
 
-      svg
-        .append("g")
-        .selectAll("circle")
+      const points = plot.append("g")
+        .selectAll<SVGCircleElement, DataPoint>("circle")
         .data(item.values)
         .enter()
         .append("circle")
-        .attr("cx", (point: DataPoint) => xScale(point.label) ?? margin.left)
-        .attr("cy", (point: DataPoint) => yScale(point.value))
-        .attr("r", 3.5)
-        .attr("fill", item.color);
+        .attr("cx", (_point, index) => baseX(index))
+        .attr("cy", y(0))
+        .attr("r", 0)
+        .attr("fill", item.color)
+        .attr("stroke", "#0d1726")
+        .attr("stroke-width", 2)
+        .style("cursor", "crosshair")
+        .on("pointerenter", function (event: PointerEvent, point) {
+          d3.select(this).interrupt().transition().duration(160).attr("r", 6.5).attr("stroke", "#ffffff");
+          showChartTooltip(event, point.label, [
+            `${item.label}: ${point.value.toLocaleString()}`,
+          ]);
+        })
+        .on("pointermove", (event: PointerEvent) => moveChartTooltip(event))
+        .on("pointerleave", function () {
+          hideChartTooltip();
+          d3.select(this).interrupt().transition().duration(160).attr("r", 4).attr("stroke", "#0d1726");
+        });
+      points.transition()
+        .duration(560)
+        .delay((_point, index) => Math.min(index * 24, 280))
+        .ease(d3.easeCubicOut)
+        .attr("cy", (point) => y(point.value))
+        .attr("r", 4);
+      pointsBySeries.set(item.key, points);
     });
-  }, [height, margin.bottom, margin.left, margin.right, margin.top, series, width]);
+
+    const updateXAxis = (scale: d3.ScaleLinear<number, number>) => {
+      const tickValues = getReadableTickIndices(scale.domain(), labels.length, 6);
+      xAxis.call(
+        d3.axisBottom(scale)
+          .tickValues(tickValues)
+          .tickSize(0)
+          .tickPadding(12)
+          .tickFormat((value) => labels[Math.round(Number(value))] ?? ""),
+      );
+      xAxis.select(".domain").remove();
+      xAxis.selectAll("text")
+        .attr("transform", "rotate(-32)")
+        .attr("text-anchor", "end")
+        .attr("dx", "-0.45em")
+        .attr("dy", "0.3em");
+    };
+    updateXAxis(baseX);
+
+    const zoom = d3.zoom<SVGGElement, unknown>()
+      .scaleExtent([1, 24])
+      .translateExtent([[0, 0], [plotWidth, plotHeight]])
+      .extent([[0, 0], [plotWidth, plotHeight]])
+      .on("start", () => frame.select("rect").style("cursor", "grabbing"))
+      .on("zoom", (event) => {
+        const transformedX = event.transform.rescaleX(baseX);
+        updateXAxis(transformedX);
+        series.forEach((item) => {
+          pathBySeries.get(item.key)?.attr("d", buildLine(transformedX));
+          pointsBySeries.get(item.key)?.attr("cx", (_point, index) => transformedX(index));
+        });
+      })
+      .on("end", () => frame.select("rect").style("cursor", "grab"));
+    zoomRef.current = zoom;
+    frame.call(zoom);
+
+    return () => {
+      zoomTargetRef.current = null;
+      hideChartTooltip();
+    };
+  }, [height, series]);
 
   return (
-    <div className="chart-shell">
-      <div className="chart-legend">
-        {series.map((item) => (
-          <span key={item.key} className="chart-legend-item">
-            <span className="chart-legend-dot" style={{ backgroundColor: item.color }} />
-            {item.label}
-          </span>
-        ))}
+    <div className="chart-shell dashboard-trend-chart">
+      <div className="chart-action-row">
+        <div className="chart-legend">
+          {series.map((item) => (
+            <span key={item.key} className="chart-legend-item">
+              <span className="chart-legend-dot" style={{ backgroundColor: item.color }} />
+              {item.label}
+            </span>
+          ))}
+        </div>
+        <div className="chart-action-buttons">
+          <button
+            type="button"
+            className="chart-action-button"
+            data-export-hidden="true"
+            onClick={() => {
+              if (zoomTargetRef.current && zoomRef.current) {
+                d3.select(zoomTargetRef.current).transition().duration(350).call(
+                  zoomRef.current.transform,
+                  d3.zoomIdentity,
+                );
+              }
+            }}
+          >
+            Reset zoom
+          </button>
+          <button
+            type="button"
+            className="chart-action-button"
+            data-export-hidden="true"
+            onClick={(event) => exportChartCardAsPng(event.currentTarget, "recent-detections.png")}
+          >
+            Export PNG
+          </button>
+        </div>
       </div>
-      <svg ref={ref} className="d3-chart" role="img" aria-label="Trend chart" />
+      <svg ref={ref} className="d3-chart" role="img" aria-label="Recent detections trend chart" />
     </div>
   );
+}
+
+function getReadableTickIndices(
+  domain: number[],
+  labelCount: number,
+  maximumTicks: number,
+) {
+  const start = Math.max(0, Math.ceil(Math.min(...domain)));
+  const end = Math.min(labelCount - 1, Math.floor(Math.max(...domain)));
+  if (end < start) return [0];
+
+  const visible = d3.range(start, end + 1);
+  if (visible.length <= maximumTicks) return visible;
+
+  const stride = Math.ceil((visible.length - 1) / (maximumTicks - 1));
+  const reduced = visible.filter((_value, index) => index % stride === 0);
+  if (reduced[reduced.length - 1] !== end) reduced.push(end);
+  return reduced;
 }
