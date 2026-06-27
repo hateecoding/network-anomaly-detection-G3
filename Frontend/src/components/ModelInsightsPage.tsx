@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  fetchModelInsights,
+  loadModelInsights,
   formatMetricPercent,
   formatModelName,
   ModelInsightItem,
@@ -83,7 +83,7 @@ export function ModelInsightsPage({
     let active = true;
     let requestInFlight = false;
 
-    const loadModelInsights = async () => {
+    const refreshModelInsights = async () => {
       if (requestInFlight) {
         return;
       }
@@ -91,7 +91,7 @@ export function ModelInsightsPage({
 
       try {
         // Model Insights shows backend metadata/historical evaluation, not live accuracy from the latest upload.
-        const nextData = await fetchModelInsights();
+        const nextData = await loadModelInsights();
         if (!active) {
           return;
         }
@@ -117,10 +117,10 @@ export function ModelInsightsPage({
       }
     };
 
-    void loadModelInsights();
+    void refreshModelInsights();
     // Refresh metadata periodically so redeployed model artifacts are reflected without a page reload.
     const timer = window.setInterval(
-      () => void loadModelInsights(),
+      () => void refreshModelInsights(),
       STANDARD_SYNC_INTERVAL_MS,
     );
 

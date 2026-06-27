@@ -3,7 +3,7 @@ import type {
   DetectionTrendPoint,
   SummaryMetric,
 } from "../data/presentationData";
-import { requestJson } from "./api";
+import { getJson } from "./api";
 import { loadCachedUploadAnalysis, type UploadAnalysisResult } from "./uploadAnalysis";
 
 type BackendDashboardSummary = {
@@ -77,15 +77,15 @@ type BackendTopRoutesResponse = {
   }[];
 };
 
-export async function fetchDashboardBackendData(): Promise<DashboardBackendData> {
+export async function loadDashboardBackendData(): Promise<DashboardBackendData> {
   const cachedAnalysis = loadCachedUploadAnalysis();
 
   try {
-    // Dashboard is backend-first; local upload cache is only used when the backend has no upload summary.
+    // The dashboard helper centralizes its three backend reads and applies the shared upload-cache fallback.
     const [summary, alerts, routes] = await Promise.all([
-      requestJson<BackendDashboardSummary>("/dashboard-summary"),
-      requestJson<BackendAlertsResponse>("/alerts?limit=4"),
-      requestJson<BackendTopRoutesResponse>("/top-routes?limit=5"),
+      getJson<BackendDashboardSummary>("/dashboard-summary"),
+      getJson<BackendAlertsResponse>("/alerts?limit=4"),
+      getJson<BackendTopRoutesResponse>("/top-routes?limit=5"),
     ]);
 
     const backendData = mapBackendDashboardData(summary, alerts, routes);

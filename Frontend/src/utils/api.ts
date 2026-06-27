@@ -1,8 +1,12 @@
-import { buildApiUrl } from "../config/api";
+import axios, { type AxiosRequestConfig } from "axios";
+import { API_BASE_URL } from "../config/api";
 
-type RequestJsonOptions = Omit<RequestInit, "body"> & {
-  body?: BodyInit | null;
-};
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+
+type SharedRequestConfig = Omit<
+  AxiosRequestConfig,
+  "baseURL" | "data" | "method" | "url"
+>;
 
 type ErrorPayload = {
   detail?: string | { msg?: string }[] | Record<string, unknown>;
@@ -11,6 +15,29 @@ type ErrorPayload = {
   error_info?: { message?: string; details?: unknown };
   message?: string;
 };
+
+// One private Axios client keeps the base URL, timeout, and transport policy consistent across every page.
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: DEFAULT_REQUEST_TIMEOUT_MS,
+  headers: {
+    Accept: "application/json",
+  },
+});
+
+apiClient.interceptors.request.use((config) => {
+  const isMultipart =
+    typeof FormData !== "undefined" && config.data instanceof FormData;
+
+  if (isMultipart) {
+    // The browser must generate the multipart boundary; manually setting this header breaks uploads.
+    config.headers.delete("Content-Type");
+  } else if (config.data !== undefined && config.data !== null) {
+    config.headers.set("Content-Type", "application/json");
+  }
+
+  return config;
+});
 
 export class ApiError extends Error {
   status: number;
@@ -22,35 +49,68 @@ export class ApiError extends Error {
   }
 }
 
-export async function requestJson<T>(
+export function getJson<T>(
   path: string,
-  options: RequestJsonOptions = {},
+  config: SharedRequestConfig = {},
 ): Promise<T> {
-  const response = await fetch(buildApiUrl(path), options);
-  const rawBody = await response.text();
-  const data: unknown = parseJson(rawBody);
+  return executeRequest<T>({ ...config, method: "GET", url: path });
+}
 
-  if (!response.ok) {
-    // Backend errors use a few shapes across FastAPI validation and custom handlers; normalize them for UI messages.
-    throw new ApiError(getErrorMessage(data, response.status), response.status);
-  }
+export function postJson<TResponse, TBody = unknown>(
+  path: string,
+  body: TBody,
+  config: SharedRequestConfig = {},
+): Promise<TResponse> {
+  return executeRequest<TResponse>({ ...config, data: body, method: "POST", url: path });
+}
 
-  return data as T;
+export function postMultipart<T>(
+  path: string,
+  body: FormData,
+  config: SharedRequestConfig = {},
+): Promise<T> {
+  return executeRequest<T>({ ...config, data: body, method: "POST", url: path });
 }
 
 export async function checkBackendHealth(): Promise<void> {
-  await requestJson<unknown>("/health");
+  await getJson<unknown>("/health");
 }
 
-function parseJson(value: string) {
-  if (!value) {
-    return null;
+async function executeRequest<T>(config: AxiosRequestConfig): Promise<T> {
+  try {
+    const response = await apiClient.request<T>(config);
+    return response.data;
+  } catch (error) {
+    // All pages receive the same friendly ApiError shape regardless of Axios/FastAPI error details.
+    throw normalizeApiError(error);
   }
+}
+
+function normalizeApiError(error: unknown): ApiError {
+  if (!axios.isAxiosError(error)) {
+    return new ApiError("The request could not be completed.", 0);
+  }
+
+  if (error.code === "ECONNABORTED" || error.code === "ETIMEDOUT") {
+    return new ApiError("The backend request timed out. Please try again.", 0);
+  }
+
+  if (!error.response) {
+    return new ApiError("Unable to reach the backend service. Please try again.", 0);
+  }
+
+  const status = error.response.status;
+  const payload = parsePayload(error.response.data);
+  return new ApiError(getErrorMessage(payload, status), status);
+}
+
+function parsePayload(value: unknown): unknown {
+  if (typeof value !== "string") return value;
 
   try {
     return JSON.parse(value);
   } catch {
-    return null;
+    return value;
   }
 }
 
@@ -75,9 +135,7 @@ function getErrorMessage(data: unknown, status: number) {
       .filter((value): value is string => Boolean(value))
       .join(", ");
 
-    if (joined) {
-      return joined;
-    }
+    if (joined) return joined;
   }
 
   if (typeof payload.message === "string" && payload.message.trim()) {

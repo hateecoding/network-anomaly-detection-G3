@@ -35,7 +35,7 @@ export function D3ProbabilityHistogram({
 
     const width = 680;
     const height = 320;
-    const margin = { top: 34, right: 24, bottom: 56, left: 64 };
+    const margin = { top: 50, right: 24, bottom: 56, left: 64 };
     const svg = d3.select(ref.current);
     svg.selectAll("*").remove();
     svg.attr("viewBox", `0 0 ${width} ${height}`);
@@ -91,10 +91,16 @@ export function D3ProbabilityHistogram({
       .attr("y", (item) => y(item.value))
       .attr("height", (item) => y(0) - y(item.value));
 
-    for (const [threshold, color, label] of [
+    const thresholds = [
       [reviewThreshold, "#fbbf24", "Review"],
       [attackThreshold, "#ef4444", "Attack"],
-    ] as const) {
+    ] as const;
+    const thresholdPositions = thresholds.map(
+      ([threshold]) => margin.left + threshold * (width - margin.left - margin.right),
+    );
+    const labelsAreClose = Math.abs(thresholdPositions[0] - thresholdPositions[1]) < 110;
+
+    thresholds.forEach(([threshold, color, label], index) => {
       const xPosition = margin.left + threshold * (width - margin.left - margin.right);
       svg.append("line")
         .attr("x1", xPosition)
@@ -104,13 +110,35 @@ export function D3ProbabilityHistogram({
         .attr("stroke", color)
         .attr("stroke-width", 1.5)
         .attr("stroke-dasharray", "5 5");
-      svg.append("text")
+
+      const text = `${label} ${Math.round(threshold * 100)}%`;
+      const textWidth = text.length * 6.6 + 12;
+      const labelX = xPosition + (labelsAreClose ? (index === 0 ? -6 : 6) : 0);
+      const labelY = margin.top - (labelsAreClose ? (index === 0 ? 28 : 8) : 10);
+      const anchor = labelsAreClose ? (index === 0 ? "end" : "start") : "middle";
+      const backgroundX = anchor === "end"
+        ? labelX - textWidth
+        : anchor === "start"
+          ? labelX
+          : labelX - textWidth / 2;
+      const labelGroup = svg.append("g").attr("class", "threshold-label-group");
+      labelGroup.append("rect")
+        .attr("x", backgroundX)
+        .attr("y", labelY - 13)
+        .attr("width", textWidth)
+        .attr("height", 18)
+        .attr("rx", 5)
+        .attr("fill", "#0d1726")
+        .attr("stroke", color)
+        .attr("stroke-opacity", 0.45);
+      labelGroup.append("text")
         .attr("class", "d3-value-label")
-        .attr("x", xPosition)
-        .attr("y", margin.top - 10)
-        .attr("text-anchor", "middle")
-        .text(`${label} ${Math.round(threshold * 100)}%`);
-    }
+        .attr("x", labelX)
+        .attr("y", labelY)
+        .attr("text-anchor", anchor)
+        .style("fill", color)
+        .text(text);
+    });
 
     svg.append("text")
       .attr("class", "d3-value-label")

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { VisitorIdentifier } from "../data/presentationData";
-import { fetchLiveTrafficData, type LiveTrafficData } from "../utils/liveVisitors";
+import { loadLiveTrafficData, type LiveTrafficData } from "../utils/liveVisitors";
 import { LIVE_SYNC_INTERVAL_MS, type SyncCallbacks } from "../utils/sync";
 import { BarChart as D3BarChart } from "./BarChart";
 import { DataColumn, DataTable } from "./DataTable";
@@ -74,7 +74,7 @@ export function LiveVisitorsPage({
 
       try {
         // Live Visitors is runtime-only backend activity, refreshed from /live-visitors and /top-routes.
-        const nextTraffic = await fetchLiveTrafficData();
+        const nextTraffic = await loadLiveTrafficData();
         if (!active) {
           return;
         }

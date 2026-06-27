@@ -44,6 +44,7 @@ export function DataTable<T>({
           {rows.map((row) => (
             <tr
               key={rowKey(row)}
+              data-row-key={rowKey(row)}
               className={`${rowClassName ? rowClassName(row) : ""} ${onRowClick ? "data-table-row-actionable" : ""}`.trim()}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
               onKeyDown={onRowClick ? (event) => {

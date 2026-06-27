@@ -1,4 +1,4 @@
-import { requestJson } from "./api";
+import { getJson } from "./api";
 
 export type ModelMetricName = "accuracy" | "precision" | "recall" | "f1" | "roc_auc";
 
@@ -34,9 +34,9 @@ type BackendModelMetricsResponse = {
   }[];
 };
 
-export async function fetchModelInsights(): Promise<ModelInsightsData> {
-  // The backend owns model recommendation metadata so the UI does not hardcode a "best" model.
-  const response = await requestJson<BackendModelMetricsResponse>("/model-metrics");
+export async function loadModelInsights(): Promise<ModelInsightsData> {
+  // The model-metrics helper keeps historical metadata retrieval separate from presentation components.
+  const response = await getJson<BackendModelMetricsResponse>("/model-metrics");
 
   return {
     generatedAt: response.generated_at,

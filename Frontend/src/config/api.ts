@@ -5,10 +5,6 @@ function normalizeBaseUrl(value: string) {
 }
 
 export const API_BASE_URL = normalizeBaseUrl(
+  // Amplify supplies VITE_API_BASE_URL; the App Runner URL keeps production usable if it is omitted.
   import.meta.env.VITE_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL,
 );
-
-export function buildApiUrl(path: string) {
-  // Centralizes the App Runner base URL so components never hardcode production endpoints.
-  return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
-}

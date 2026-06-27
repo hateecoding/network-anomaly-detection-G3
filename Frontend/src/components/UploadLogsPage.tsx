@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { UploadAnalysisRow } from "../data/presentationData";
 import { checkBackendHealth } from "../utils/api";
@@ -83,6 +83,8 @@ export function UploadLogsPage({
   const [yFeature, setYFeature] = useState<ScatterFeature>("duration");
   const [pageSize, setPageSize] = useState<(typeof pageSizeOptions)[number]>(25);
   const [page, setPage] = useState(1);
+  const [rowPendingReveal, setRowPendingReveal] = useState<number | null>(null);
+  const resultTableRef = useRef<HTMLDivElement | null>(null);
   const [state, setState] = useState<{
     type: "idle" | "loading" | "success" | "error";
     message: string;
@@ -130,9 +132,24 @@ export function UploadLogsPage({
   const safePage = Math.min(page, totalPages);
   const pageStart = (safePage - 1) * pageSize;
   const paginatedRows = filteredRows.slice(pageStart, pageStart + pageSize);
+  const visibleRowKeys = paginatedRows.map((row) => row.rowId).join("|");
 
   const selectRow = (recordNumber: number) => {
     setSelectedRow(recordNumber);
+    setRowPendingReveal(recordNumber);
+
+    const filteredIndex = filteredRows.findIndex((row) => row.recordNumber === recordNumber);
+    if (filteredIndex >= 0) {
+      setPage(Math.floor(filteredIndex / pageSize) + 1);
+      return;
+    }
+
+    // If active filters hide a chosen risky record, reveal it instead of leaving an invisible selection.
+    resetFilters();
+    const unfilteredIndex = sortRows(rows, "priority").findIndex(
+      (row) => row.recordNumber === recordNumber,
+    );
+    setPage(unfilteredIndex >= 0 ? Math.floor(unfilteredIndex / pageSize) + 1 : 1);
   };
 
   const columns: DataColumn<UploadAnalysisRow>[] = [
@@ -170,7 +187,7 @@ export function UploadLogsPage({
   ];
 
   useEffect(() => {
-    setPage(1);
+    if (rowPendingReveal === null) setPage(1);
   }, [
     deferredQuery,
     filter,
@@ -190,6 +207,32 @@ export function UploadLogsPage({
       setSelectedRow((current) => current ?? rows[0]?.recordNumber ?? null);
     }
   }, [analysis, rows]);
+
+  useEffect(() => {
+    if (rowPendingReveal === null) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const selected = rows.find((row) => row.recordNumber === rowPendingReveal);
+      if (!selected) {
+        setRowPendingReveal(null);
+        return;
+      }
+
+      const tableRows = resultTableRef.current?.querySelectorAll<HTMLTableRowElement>(
+        "tr[data-row-key]",
+      );
+      const target = Array.from(tableRows ?? []).find(
+        (row) => row.dataset.rowKey === selected.rowId,
+      );
+      if (!target) return;
+
+      target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      target.focus({ preventScroll: true });
+      setRowPendingReveal(null);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [page, pageSize, rowPendingReveal, rows, visibleRowKeys]);
 
   useEffect(() => {
     let active = true;
@@ -566,7 +609,7 @@ export function UploadLogsPage({
                     <span>{analysis.metadata.returnedRecords.toLocaleString()} of {analysis.metadata.totalRecords.toLocaleString()} records returned</span>
                   </div>
 
-                  <div className="panel-table-wrap">
+                  <div ref={resultTableRef} className="panel-table-wrap">
                     {state.type === "loading" ? <LoadingOverlay message="Processing model predictions..." /> : null}
                     <DataTable
                       columns={columns}
@@ -591,7 +634,13 @@ export function UploadLogsPage({
                 <Panel title="Highest-risk preview records" subtitle="Fast access to rows requiring attention.">
                   <div className="risky-record-list">
                     {sortRows(rows, "attackProbability").slice(0, 5).map((row) => (
-                      <button key={row.rowId} type="button" className="risky-record-item" onClick={() => selectRow(row.recordNumber)}>
+                      <button
+                        key={row.rowId}
+                        type="button"
+                        className={`risky-record-item ${row.recordNumber === selectedRow ? "risky-record-item-selected" : ""}`}
+                        aria-pressed={row.recordNumber === selectedRow}
+                        onClick={() => selectRow(row.recordNumber)}
+                      >
                         <span className={`risk-dot risk-dot-${row.prediction === "Attack" ? "attack" : row.prediction === "Review Recommended" ? "review" : "normal"}`} />
                         <span><strong>{row.rowId}</strong><small>{row.protocol} · {row.service.toUpperCase()}</small></span>
                         <span><strong>{row.attackProbability}%</strong><small>{row.prediction}</small></span>

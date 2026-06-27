@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchDashboardBackendData, type DashboardBackendData } from "../utils/dashboard";
+import { loadDashboardBackendData, type DashboardBackendData } from "../utils/dashboard";
 import { STANDARD_SYNC_INTERVAL_MS, type SyncCallbacks } from "../utils/sync";
 import { AlertList } from "./AlertList";
 import { LineChart as D3LineChart } from "./LineChart";
@@ -39,8 +39,8 @@ export function DashboardPage({
       requestInFlight = true;
 
       try {
-        // fetchDashboardBackendData applies the backend-first, local-cache-second dashboard policy.
-        const data = await fetchDashboardBackendData();
+        // loadDashboardBackendData applies the backend-first, local-cache-second dashboard policy.
+        const data = await loadDashboardBackendData();
         if (!active) {
           return;
         }

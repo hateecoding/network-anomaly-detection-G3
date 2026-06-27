@@ -1,4 +1,4 @@
-import { ApiError, requestJson } from "./api";
+import { ApiError, postMultipart } from "./api";
 import type { AlertRecord, UploadAnalysisRow } from "../data/presentationData";
 
 const MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024;
@@ -234,10 +234,9 @@ export async function analyzeUploadedFile(file: File): Promise<UploadAnalysisRes
   formData.append("file", file);
 
   try {
-    // /upload-log is the single production batch-analysis path; the frontend never fabricates chart values.
-    const response = await requestJson<BackendUploadResponse>("/upload-log", {
-      method: "POST",
-      body: formData,
+    // The upload helper uses multipart transport and a longer timeout without exposing Axios to the page.
+    const response = await postMultipart<BackendUploadResponse>("/upload-log", formData, {
+      timeout: 180_000,
     });
 
     return mapUploadAnalysis(response);

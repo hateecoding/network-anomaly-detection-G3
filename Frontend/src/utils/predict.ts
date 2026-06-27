@@ -1,4 +1,4 @@
-import { requestJson } from "./api";
+import { postJson } from "./api";
 
 export type PredictionInput = {
   duration: number;
@@ -34,13 +34,8 @@ type BackendPredictionResponse = {
 export async function predictNetworkSample(
   input: PredictionInput,
 ): Promise<PredictionResult> {
-  // Maps the demo form's camelCase fields into the FastAPI /predict schema used by the model pipeline.
-  const response = await requestJson<BackendPredictionResponse>("/predict", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+  // The prediction helper owns camelCase-to-FastAPI mapping and returns a typed UI result.
+  const response = await postJson<BackendPredictionResponse>("/predict", {
       duration: input.duration,
       src_bytes: input.srcBytes,
       dst_bytes: input.dstBytes,
@@ -56,7 +51,6 @@ export async function predictNetworkSample(
       connection_group: input.connectionGroup,
       service_detail: input.serviceDetail,
       connection_detail: input.connectionDetail,
-    }),
   });
 
   const attackProbability = clamp(response.attack_probability, 0, 1);

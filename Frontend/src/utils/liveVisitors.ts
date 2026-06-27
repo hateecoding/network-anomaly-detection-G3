@@ -1,5 +1,5 @@
 import type { ActivityFeedItem, RouteStat, VisitorIdentifier, VisitorRequest } from "../data/presentationData";
-import { requestJson } from "./api";
+import { getJson, postJson } from "./api";
 
 type BackendLiveActivityEvent = {
   timestamp: string;
@@ -41,11 +41,11 @@ export type LiveTrafficData = {
   activityFeed: ActivityFeedItem[];
 };
 
-export async function fetchLiveTrafficData(): Promise<LiveTrafficData> {
-  // These endpoints read backend runtime memory only; no upload cache or database is mixed into live activity.
+export async function loadLiveTrafficData(): Promise<LiveTrafficData> {
+  // The visitor helper polls runtime-only endpoints through the shared Axios transport.
   const [live, routes] = await Promise.all([
-    requestJson<BackendLiveVisitorsResponse>("/live-visitors?limit=50"),
-    requestJson<BackendTopRoutesResponse>("/top-routes?limit=10"),
+    getJson<BackendLiveVisitorsResponse>("/live-visitors?limit=50"),
+    getJson<BackendTopRoutesResponse>("/top-routes?limit=10"),
   ]);
 
   return {
@@ -67,16 +67,10 @@ export async function fetchLiveTrafficData(): Promise<LiveTrafficData> {
 }
 
 export async function trackFrontendVisit(route: string) {
-  // Sends only route/timestamp context; backend anonymizes the visitor identifier before storing it in memory.
-  await requestJson<{ status: string }>("/track-visit", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      route,
-      timestamp: new Date().toISOString(),
-    }),
+  // Tracking sends only route/timestamp context; the backend anonymizes runtime visitor identifiers.
+  await postJson<{ status: string }>("/track-visit", {
+    route,
+    timestamp: new Date().toISOString(),
   });
 }
 
