@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { UploadAnalysisRow } from "../data/presentationData";
 import { checkBackendHealth } from "../utils/api";
@@ -39,6 +39,15 @@ import { UploadBox } from "./UploadBox";
 const pageSizeOptions = [25, 50, 100] as const;
 type FilterOption = "all" | "attack" | "review" | "normal";
 type SortOption = "priority" | "record" | "confidence" | "attackProbability";
+type AnalysisTab = "overview" | "risk-trend" | "feature-explorer" | "protocol-risk" | "probability";
+
+const analysisTabs: Array<{ id: AnalysisTab; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "risk-trend", label: "Risk Trend" },
+  { id: "feature-explorer", label: "Feature Explorer" },
+  { id: "protocol-risk", label: "Protocol Risk" },
+  { id: "probability", label: "Probability" },
+];
 
 const modelColumns: DataColumn<UploadModelAnalysisItem>[] = [
   { key: "model", header: "Model", render: (row) => <strong>{formatModelName(row.modelName)}</strong> },
@@ -72,6 +81,7 @@ export function UploadLogsPage({
   const [sort, setSort] = useState<SortOption>("priority");
   const [protocolFilter, setProtocolFilter] = useState<string | null>(null);
   const [selectedProbabilityBucket, setSelectedProbabilityBucket] = useState<string | null>(null);
+  const [activeAnalysisTab, setActiveAnalysisTab] = useState<AnalysisTab>("overview");
   const [probabilityMin, setProbabilityMin] = useState(0);
   const [probabilityMax, setProbabilityMax] = useState(100);
   const [rowStart, setRowStart] = useState(1);
@@ -84,7 +94,9 @@ export function UploadLogsPage({
   const [pageSize, setPageSize] = useState<(typeof pageSizeOptions)[number]>(25);
   const [page, setPage] = useState(1);
   const [rowPendingReveal, setRowPendingReveal] = useState<number | null>(null);
+  const [detailsRecordNumber, setDetailsRecordNumber] = useState<number | null>(null);
   const resultTableRef = useRef<HTMLDivElement | null>(null);
+  const detailsTriggerRef = useRef<HTMLElement | null>(null);
   const [state, setState] = useState<{
     type: "idle" | "loading" | "success" | "error";
     message: string;
@@ -133,6 +145,7 @@ export function UploadLogsPage({
   const pageStart = (safePage - 1) * pageSize;
   const paginatedRows = filteredRows.slice(pageStart, pageStart + pageSize);
   const visibleRowKeys = paginatedRows.map((row) => row.rowId).join("|");
+  const detailsRow = rows.find((row) => row.recordNumber === detailsRecordNumber) ?? null;
 
   const selectRow = (recordNumber: number) => {
     setSelectedRow(recordNumber);
@@ -151,6 +164,19 @@ export function UploadLogsPage({
     );
     setPage(unfilteredIndex >= 0 ? Math.floor(unfilteredIndex / pageSize) + 1 : 1);
   };
+
+  const openRowDetails = (
+    row: UploadAnalysisRow,
+    trigger: HTMLElement,
+  ) => {
+    detailsTriggerRef.current = trigger;
+    selectRow(row.recordNumber);
+    setDetailsRecordNumber(row.recordNumber);
+  };
+
+  const closeRowDetails = useCallback(() => {
+    setDetailsRecordNumber(null);
+  }, []);
 
   const columns: DataColumn<UploadAnalysisRow>[] = [
     { key: "rowId", header: "Row", render: (row) => <strong>{row.rowId}</strong> },
@@ -178,9 +204,9 @@ export function UploadLogsPage({
       render: (row) => (
         <button type="button" className="table-action-button" onClick={(event) => {
           event.stopPropagation();
-          selectRow(row.recordNumber);
+          openRowDetails(row, event.currentTarget);
         }}>
-          {row.prediction === "Normal" ? "View details" : "Review record"}
+          View details
         </button>
       ),
     },
@@ -304,6 +330,7 @@ export function UploadLogsPage({
     setAnalysis(null);
     setRows([]);
     setSelectedRow(null);
+    setDetailsRecordNumber(null);
     setSelectedFile(null);
     resetFilters(1);
     setState({ type: "idle", message: "Cached analysis cleared." });
@@ -355,6 +382,14 @@ export function UploadLogsPage({
     const alreadySelected = rowStart === point.startRow && rowEnd === point.endRow;
     setRowStart(alreadySelected ? 1 : point.startRow);
     setRowEnd(alreadySelected ? analysis?.metadata.totalRecords ?? 1 : point.endRow);
+  };
+
+  const selectAnalysisTab = (tab: AnalysisTab) => {
+    setActiveAnalysisTab(tab);
+    document.getElementById(`upload-${tab}`)?.scrollIntoView({
+      behavior: "smooth",
+      block: tab === "overview" ? "start" : "center",
+    });
   };
 
   return (
@@ -495,11 +530,20 @@ export function UploadLogsPage({
 
               <section className="upload-chart-workspace">
                 <nav className="upload-analysis-tabs" aria-label="Upload analysis sections">
-                  <button type="button" className="upload-analysis-tab upload-analysis-tab-active" onClick={() => document.getElementById("upload-overview")?.scrollIntoView({ behavior: "smooth", block: "start" })}>Overview</button>
-                  <button type="button" className="upload-analysis-tab" onClick={() => document.getElementById("upload-risk-trend")?.scrollIntoView({ behavior: "smooth", block: "center" })}>Risk Trend</button>
-                  <button type="button" className="upload-analysis-tab" onClick={() => document.getElementById("upload-feature-explorer")?.scrollIntoView({ behavior: "smooth", block: "center" })}>Feature Explorer</button>
-                  <button type="button" className="upload-analysis-tab" onClick={() => document.getElementById("upload-protocol-risk")?.scrollIntoView({ behavior: "smooth", block: "center" })}>Protocol Risk</button>
-                  <button type="button" className="upload-analysis-tab" onClick={() => document.getElementById("upload-probability")?.scrollIntoView({ behavior: "smooth", block: "center" })}>Probability</button>
+                  {analysisTabs.map((tab) => {
+                    const isActive = activeAnalysisTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        className={`upload-analysis-tab ${isActive ? "upload-analysis-tab-active" : ""}`}
+                        aria-current={isActive ? "page" : undefined}
+                        onClick={() => selectAnalysisTab(tab.id)}
+                      >
+                        {tab.label}
+                      </button>
+                    );
+                  })}
                 </nav>
                 <div className="upload-chart-grid upload-chart-grid-primary">
                   <div id="upload-overview" className="upload-chart-cell">
@@ -639,7 +683,7 @@ export function UploadLogsPage({
                         type="button"
                         className={`risky-record-item ${row.recordNumber === selectedRow ? "risky-record-item-selected" : ""}`}
                         aria-pressed={row.recordNumber === selectedRow}
-                        onClick={() => selectRow(row.recordNumber)}
+                        onClick={(event) => openRowDetails(row, event.currentTarget)}
                       >
                         <span className={`risk-dot risk-dot-${row.prediction === "Attack" ? "attack" : row.prediction === "Review Recommended" ? "review" : "normal"}`} />
                         <span><strong>{row.rowId}</strong><small>{row.protocol} · {row.service.toUpperCase()}</small></span>
@@ -674,6 +718,155 @@ export function UploadLogsPage({
         </div>
 
       </div>
+      {detailsRow ? (
+        <RecordDetailsModal
+          row={detailsRow}
+          returnFocusTo={detailsTriggerRef.current}
+          onClose={closeRowDetails}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function RecordDetailsModal({
+  row,
+  returnFocusTo,
+  onClose,
+}: {
+  row: UploadAnalysisRow;
+  returnFocusTo: HTMLElement | null;
+  onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus());
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialogRef.current.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      returnFocusTo?.focus();
+    };
+  }, [onClose, returnFocusTo]);
+
+  return (
+    <div
+      className="record-details-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        className="record-details-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="record-details-title"
+        aria-describedby="record-details-description"
+        tabIndex={-1}
+      >
+        <header className="record-details-header">
+          <div>
+            <p className="eyebrow">Traffic Record</p>
+            <h3 id="record-details-title">{row.rowId}</h3>
+            <p id="record-details-description">Model output and traffic attributes for the selected record.</p>
+          </div>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            className="record-details-close"
+            aria-label="Close record details"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </header>
+
+        <div className="record-details-statuses">
+          <RecordDetail label="Model prediction">
+            <StatusBadge
+              label={row.modelPrediction.toUpperCase()}
+              tone={row.modelPrediction === "Attack" ? "attack" : "normal"}
+            />
+          </RecordDetail>
+          <RecordDetail label="Display category">
+            <StatusBadge
+              label={row.prediction.toUpperCase()}
+              tone={row.prediction === "Attack" ? "attack" : row.prediction === "Review Recommended" ? "suspicious" : "normal"}
+            />
+          </RecordDetail>
+          <RecordDetail label="Attack probability" value={`${row.attackProbability}%`} />
+          <RecordDetail label="Confidence" value={`${row.confidence}%`} />
+        </div>
+
+        <div className="record-details-grid">
+          <RecordDetail label="Protocol" value={row.protocol} />
+          <RecordDetail label="Service" value={row.service.toUpperCase()} />
+          <RecordDetail label="Duration" value={`${formatDetailNumber(row.duration)} s`} />
+          <RecordDetail label="Total bytes" value={formatDetailNumber(row.totalBytes)} />
+          <RecordDetail label="Byte ratio" value={formatDetailNumber(row.byteRatio)} />
+          <RecordDetail label="Activity count" value={formatDetailNumber(row.activityCount)} />
+          <RecordDetail label="Service count" value={formatDetailNumber(row.serviceCount)} />
+        </div>
+
+        <div className={`record-recommendation record-recommendation-${getRecommendationTone(row.prediction)}`}>
+          <span>Recommended action</span>
+          <strong>{getRecommendedAction(row.prediction)}</strong>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RecordDetail({
+  label,
+  value,
+  children,
+}: {
+  label: string;
+  value?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="record-detail-item">
+      <span>{label}</span>
+      {children ?? <strong>{value}</strong>}
     </div>
   );
 }
@@ -775,6 +968,22 @@ function ChartInsightCard({
 
 function MetaItem({ label, value }: { label: string; value: string }) {
   return <div className="result-meta-item"><span>{label}</span><strong>{value}</strong></div>;
+}
+
+function getRecommendedAction(category: UploadAnalysisRow["prediction"]) {
+  if (category === "Attack") return "Investigate this traffic immediately.";
+  if (category === "Review Recommended") return "Review this connection pattern.";
+  return "No immediate action required.";
+}
+
+function getRecommendationTone(category: UploadAnalysisRow["prediction"]) {
+  if (category === "Attack") return "attack";
+  if (category === "Review Recommended") return "review";
+  return "normal";
+}
+
+function formatDetailNumber(value: number) {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
 function sortRows(rows: UploadAnalysisRow[], sort: SortOption) {

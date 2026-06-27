@@ -1731,6 +1731,146 @@ button {
   box-shadow: 0 0 22px rgba(59, 130, 246, 0.14);
 }
 
+.record-details-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(2, 7, 15, 0.76);
+  backdrop-filter: blur(10px);
+}
+
+.record-details-dialog {
+  width: min(680px, 100%);
+  max-height: min(88vh, 760px);
+  overflow-y: auto;
+  padding: clamp(20px, 2.5vw, 28px);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  border-radius: 20px;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top right, rgba(96, 165, 250, 0.12), transparent 34%),
+    #0c1726;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.58);
+}
+
+.record-details-dialog:focus-visible {
+  outline: 2px solid rgba(96, 165, 250, 0.7);
+  outline-offset: 4px;
+}
+
+.record-details-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.record-details-header h3,
+.record-details-header p {
+  margin: 0;
+}
+
+.record-details-header h3 {
+  font-size: clamp(1.35rem, 2.4vw, 1.8rem);
+}
+
+.record-details-header #record-details-description {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.record-details-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.record-details-close:hover,
+.record-details-close:focus-visible {
+  border-color: rgba(96, 165, 250, 0.58);
+  background: rgba(96, 165, 250, 0.12);
+  outline: none;
+}
+
+.record-details-statuses,
+.record-details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.record-detail-item {
+  display: grid;
+  align-content: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 74px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.record-detail-item > span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.record-detail-item > strong {
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+}
+
+.record-recommendation {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+}
+
+.record-recommendation span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.record-recommendation-normal {
+  border-color: rgba(52, 211, 153, 0.24);
+  background: rgba(52, 211, 153, 0.08);
+}
+
+.record-recommendation-review {
+  border-color: rgba(251, 191, 36, 0.28);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.record-recommendation-attack {
+  border-color: rgba(249, 115, 22, 0.32);
+  background: rgba(249, 115, 22, 0.09);
+}
+
 .risky-record-item span {
   min-width: 0;
 }
@@ -2724,6 +2864,10 @@ button {
     padding: 24px 20px;
   }
 
+  .sidebar-collapse-button {
+    display: none;
+  }
+
   .main-shell {
     grid-column: 1;
   }
@@ -2837,6 +2981,26 @@ button {
 }
 
 @media (max-width: 640px) {
+  .record-details-backdrop {
+    align-items: end;
+    padding: 12px;
+  }
+
+  .record-details-dialog {
+    max-height: 92vh;
+    padding: 18px;
+    border-radius: 18px;
+  }
+
+  .record-details-statuses,
+  .record-details-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .record-detail-item {
+    min-height: 64px;
+  }
+
   .upload-command-card .upload-box {
     grid-template-columns: 1fr;
   }
