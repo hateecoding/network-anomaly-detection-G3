@@ -52,75 +52,59 @@ export function exportChartCardAsPng(
     return;
   }
 
-  exportElementAsPng(card, filename);
+  void exportElementAsPng(card, filename).catch((error) => {
+    console.error("Chart PNG export failed.", error);
+  });
 }
 
-export function exportElementAsPng(element: HTMLElement, filename: string) {
+export async function exportElementAsPng(element: HTMLElement, filename: string) {
+  const { default: html2canvas } = await import("html2canvas");
+  await document.fonts.ready;
+  await nextPaint();
+
   const rect = element.getBoundingClientRect();
   const width = Math.ceil(Math.max(rect.width, element.scrollWidth, 320));
   const height = Math.ceil(Math.max(rect.height, element.scrollHeight, 240));
-  const clone = element.cloneNode(true) as HTMLElement;
+  const canvas = await html2canvas(element, {
+    backgroundColor: "#0d1726",
+    height,
+    width,
+    scale: Math.min(2, Math.max(1, window.devicePixelRatio)),
+    useCORS: true,
+    logging: false,
+    imageTimeout: 10_000,
+    removeContainer: true,
+    scrollX: 0,
+    scrollY: -window.scrollY,
+    windowHeight: Math.max(document.documentElement.clientHeight, height),
+    windowWidth: Math.max(document.documentElement.clientWidth, width),
+    ignoreElements: (candidate) =>
+      candidate instanceof HTMLElement && candidate.dataset.exportHidden === "true",
+    onclone: (_document, clone) => {
+      clone.style.width = `${width}px`;
+      clone.style.height = `${height}px`;
+      clone.style.maxWidth = "none";
+      clone.style.overflow = "visible";
+      clone.style.margin = "0";
+      clone.style.background = "#0d1726";
+      clone.style.boxShadow = "none";
+      clone.querySelectorAll<HTMLElement>("*").forEach((item) => {
+        item.style.animation = "none";
+        item.style.transition = "none";
+      });
+      clone.querySelectorAll<HTMLElement>(".panel, .chart-shell, .chart-insight-layout, .chart-insight-visual").forEach((item) => {
+        item.style.overflow = "visible";
+      });
+    },
+  });
 
-  clone.querySelectorAll("[data-export-hidden='true']").forEach((item) => item.remove());
-  // Inline computed styles so exported SVG/PNG keeps the dark dashboard styling outside the live DOM.
-  inlineComputedStyles(element, clone);
-
-  clone.style.width = `${width}px`;
-  clone.style.height = `${height}px`;
-  clone.style.margin = "0";
-  clone.style.background = "#0d1726";
-  clone.style.boxShadow = "none";
-
-  const wrapper = document.createElement("div");
-  wrapper.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
-  wrapper.style.width = `${width}px`;
-  wrapper.style.height = `${height}px`;
-  wrapper.style.background = "#0d1726";
-  wrapper.appendChild(clone);
-
-  const source = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-      <foreignObject width="100%" height="100%">
-        ${new XMLSerializer().serializeToString(wrapper)}
-      </foreignObject>
-    </svg>
-  `;
-  const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const image = new Image();
-
-  image.onload = () => {
-    const scale = 2;
-    const canvas = document.createElement("canvas");
-    canvas.width = width * scale;
-    canvas.height = height * scale;
-    const context = canvas.getContext("2d");
-    if (!context) {
-      URL.revokeObjectURL(url);
-      return;
-    }
-
-    context.scale(scale, scale);
-    context.fillStyle = "#0d1726";
-    context.fillRect(0, 0, width, height);
-    context.drawImage(image, 0, 0, width, height);
-    canvas.toBlob((png) => {
-      if (!png) {
-        URL.revokeObjectURL(url);
-        return;
-      }
-      const downloadUrl = URL.createObjectURL(png);
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.download = filename;
-      link.click();
-      URL.revokeObjectURL(downloadUrl);
-      URL.revokeObjectURL(url);
-    }, "image/png");
-  };
-
-  image.onerror = () => URL.revokeObjectURL(url);
-  image.src = url;
+  const png = await canvasToBlob(canvas);
+  const downloadUrl = URL.createObjectURL(png);
+  const link = document.createElement("a");
+  link.href = downloadUrl;
+  link.download = filename;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 0);
 }
 
 export function animatePathDraw(
@@ -150,23 +134,17 @@ function getTooltip() {
   return tooltip;
 }
 
-function inlineComputedStyles(source: Element, target: Element) {
-  const computed = window.getComputedStyle(source);
-  const targetElement = target as HTMLElement | SVGElement;
+function nextPaint() {
+  return new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()));
+  });
+}
 
-  for (let index = 0; index < computed.length; index += 1) {
-    const property = computed.item(index);
-    targetElement.style.setProperty(
-      property,
-      computed.getPropertyValue(property),
-      computed.getPropertyPriority(property),
-    );
-  }
-
-  Array.from(source.children).forEach((sourceChild, index) => {
-    const targetChild = target.children.item(index);
-    if (targetChild) {
-      inlineComputedStyles(sourceChild, targetChild);
-    }
+function canvasToBlob(canvas: HTMLCanvasElement) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("The chart image could not be generated."));
+    }, "image/png");
   });
 }

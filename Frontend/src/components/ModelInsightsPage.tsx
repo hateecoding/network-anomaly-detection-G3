@@ -11,6 +11,7 @@ import { STANDARD_SYNC_INTERVAL_MS, type SyncCallbacks } from "../utils/sync";
 import { BarChart as D3BarChart } from "./BarChart";
 import { DataColumn, DataTable } from "./DataTable";
 import { EmptyState } from "./EmptyState";
+import { ExportableChartPanel } from "./ExportableChartPanel";
 import { LoadingOverlay } from "./LoadingOverlay";
 import { Panel } from "./Panel";
 import { StatusBadge } from "./StatusBadge";
@@ -226,7 +227,11 @@ function MetricChartPanel({
       })) ?? [];
 
   return (
-    <Panel title={title} subtitle={subtitle}>
+    <ExportableChartPanel
+      title={title}
+      subtitle={subtitle}
+      filename={`${metric}-model-comparison.png`}
+    >
       {chartData.length > 0 ? (
         <D3BarChart data={chartData} />
       ) : (
@@ -235,7 +240,7 @@ function MetricChartPanel({
           description="The backend did not return enough model metadata for this chart."
         />
       )}
-    </Panel>
+    </ExportableChartPanel>
   );
 }
 

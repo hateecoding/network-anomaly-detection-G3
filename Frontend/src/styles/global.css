@@ -642,6 +642,13 @@ button {
   max-width: 100%;
 }
 
+.chart-export-wrap,
+.chart-export-wrap > .panel {
+  display: grid;
+  min-width: 0;
+  height: 100%;
+}
+
 .chart-legend {
   display: flex;
   flex-wrap: wrap;

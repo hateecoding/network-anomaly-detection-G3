@@ -30,6 +30,7 @@ import {
 } from "./D3ScatterPlot";
 import { DataTable, type DataColumn } from "./DataTable";
 import { EmptyState } from "./EmptyState";
+import { ExportableChartPanel } from "./ExportableChartPanel";
 import { LoadingOverlay } from "./LoadingOverlay";
 import { Panel } from "./Panel";
 import { StatusBadge } from "./StatusBadge";
@@ -611,9 +612,9 @@ export function UploadLogsPage({
                   <p className="chart-note">Ground-truth labels were not found, so accuracy-based evaluation is unavailable. Prediction distribution remains available without inventing accuracy.</p>
                 ) : null}
                 <div className="analytics-grid model-analysis-grid">
-                  {analysis.modelAnalysis.charts.performance.length > 0 ? <Panel title="Model performance"><D3BarChart data={analysis.modelAnalysis.charts.performance} height={320} /></Panel> : null}
-                  <Panel title="Prediction distribution"><D3BarChart data={analysis.modelAnalysis.charts.predictionDistribution} height={300} /></Panel>
-                  {analysis.modelAnalysis.labelsAvailable && analysis.modelAnalysis.models[0]?.confusionMatrix.length ? <Panel title="Confusion matrix"><D3HeatmapChart data={analysis.modelAnalysis.models[0].confusionMatrix} /></Panel> : null}
+                  {analysis.modelAnalysis.charts.performance.length > 0 ? <ExportableChartPanel title="Model performance" filename="dataset-model-performance.png"><D3BarChart data={analysis.modelAnalysis.charts.performance} height={320} /></ExportableChartPanel> : null}
+                  <ExportableChartPanel title="Prediction distribution" filename="model-prediction-distribution.png"><D3BarChart data={analysis.modelAnalysis.charts.predictionDistribution} height={300} /></ExportableChartPanel>
+                  {analysis.modelAnalysis.labelsAvailable && analysis.modelAnalysis.models[0]?.confusionMatrix.length ? <ExportableChartPanel title="Confusion matrix" filename="dataset-confusion-matrix.png"><D3HeatmapChart data={analysis.modelAnalysis.models[0].confusionMatrix} /></ExportableChartPanel> : null}
                 </div>
                 <div className="panel-table-wrap model-table-wrap">
                   <DataTable columns={modelColumns} rows={analysis.modelAnalysis.models} rowKey={(row) => row.modelName} />

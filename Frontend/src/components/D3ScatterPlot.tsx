@@ -53,7 +53,8 @@ export function D3ScatterPlot({
   onSelectRow,
 }: D3ScatterPlotProps) {
   const ref = useRef<SVGSVGElement | null>(null);
-  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
+  const zoomRef = useRef<d3.ZoomBehavior<SVGGElement, unknown> | null>(null);
+  const zoomTargetRef = useRef<SVGGElement | null>(null);
 
   useEffect(() => {
     if (!ref.current || rows.length === 0) {
@@ -62,7 +63,9 @@ export function D3ScatterPlot({
 
     const width = 800;
     const height = 430;
-    const margin = { top: 18, right: 24, bottom: 58, left: 72 };
+    const margin = { top: 18, right: 24, bottom: 62, left: 84 };
+    const plotWidth = width - margin.left - margin.right;
+    const plotHeight = height - margin.top - margin.bottom;
     const svg = d3.select(ref.current);
     svg.selectAll("*").remove();
     svg.attr("viewBox", `0 0 ${width} ${height}`);
@@ -74,29 +77,47 @@ export function D3ScatterPlot({
       .scaleLinear()
       .domain(d3.extent(sampledRows, (row) => row[xFeature]) as [number, number])
       .nice()
-      .range([margin.left, width - margin.right]);
+      .range([0, plotWidth]);
     const y = d3
       .scaleLinear()
       .domain(d3.extent(sampledRows, (row) => row[yFeature]) as [number, number])
       .nice()
-      .range([height - margin.bottom, margin.top]);
+      .range([plotHeight, 0]);
     const radius = d3.scaleSqrt().domain([0, 100]).range([3, 10]);
 
-    const plot = svg.append("g");
-    const xAxis = svg
+    const clipId = `scatter-clip-${Math.random().toString(36).slice(2)}`;
+    svg
+      .append("defs")
+      .append("clipPath")
+      .attr("id", clipId)
+      .append("rect")
+      .attr("width", plotWidth)
+      .attr("height", plotHeight);
+
+    const plotFrame = svg
+      .append("g")
+      .attr("transform", `translate(${margin.left},${margin.top})`);
+    zoomTargetRef.current = plotFrame.node();
+    plotFrame
+      .append("rect")
+      .attr("width", plotWidth)
+      .attr("height", plotHeight)
+      .attr("fill", "transparent")
+      .style("cursor", "grab");
+    const plot = plotFrame.append("g").attr("clip-path", `url(#${clipId})`);
+    const xAxis = plotFrame
       .append("g")
       .attr("class", "d3-axis")
-      .attr("transform", `translate(0,${height - margin.bottom})`);
-    const yAxis = svg
+      .attr("transform", `translate(0,${plotHeight})`);
+    const yAxis = plotFrame
       .append("g")
-      .attr("class", "d3-axis")
-      .attr("transform", `translate(${margin.left},0)`);
+      .attr("class", "d3-axis");
 
     const draw = (transform: d3.ZoomTransform) => {
       const transformedX = transform.rescaleX(x);
       const transformedY = transform.rescaleY(y);
-      xAxis.call(d3.axisBottom(transformedX).ticks(6));
-      yAxis.call(d3.axisLeft(transformedY).ticks(6));
+      xAxis.call(d3.axisBottom(transformedX).ticks(6).tickPadding(10));
+      yAxis.call(d3.axisLeft(transformedY).ticks(6).tickPadding(10));
       plot
         .selectAll<SVGCircleElement, UploadAnalysisRow>("circle")
         .attr("cx", (row) => transformedX(row[xFeature]))
@@ -137,8 +158,8 @@ export function D3ScatterPlot({
       .ease(d3.easeCubicOut)
       .attr("r", (row) => radius(row.attackProbability));
 
-    xAxis.call(d3.axisBottom(x).ticks(6));
-    yAxis.call(d3.axisLeft(y).ticks(6));
+    xAxis.call(d3.axisBottom(x).ticks(6).tickPadding(10));
+    yAxis.call(d3.axisLeft(y).ticks(6).tickPadding(10));
     svg
       .append("text")
       .attr("class", "d3-value-label")
@@ -151,18 +172,24 @@ export function D3ScatterPlot({
       .attr("class", "d3-value-label")
       .attr("transform", "rotate(-90)")
       .attr("x", -(margin.top + height - margin.bottom) / 2)
-      .attr("y", 18)
+      .attr("y", 20)
       .attr("text-anchor", "middle")
       .text(scatterFeatureLabels[yFeature]);
 
     const zoom = d3
-        .zoom<SVGSVGElement, unknown>()
-        .scaleExtent([1, 8])
-        .translateExtent([[margin.left, margin.top], [width - margin.right, height - margin.bottom]])
-        .extent([[margin.left, margin.top], [width - margin.right, height - margin.bottom]])
-        .on("zoom", (event) => draw(event.transform));
+      .zoom<SVGGElement, unknown>()
+      .scaleExtent([1, 64])
+      .translateExtent([[0, 0], [plotWidth, plotHeight]])
+      .extent([[0, 0], [plotWidth, plotHeight]])
+      .on("start", () => plotFrame.select("rect").style("cursor", "grabbing"))
+      .on("zoom", (event) => draw(event.transform))
+      .on("end", () => plotFrame.select("rect").style("cursor", "grab"));
     zoomRef.current = zoom;
-    svg.call(zoom);
+    plotFrame.call(zoom);
+
+    return () => {
+      zoomTargetRef.current = null;
+    };
   }, [onSelectRow, rows, selectedRow, xFeature, yFeature]);
 
   return (
@@ -179,8 +206,8 @@ export function D3ScatterPlot({
             className="chart-action-button"
             data-export-hidden="true"
             onClick={() => {
-              if (ref.current && zoomRef.current) {
-                d3.select(ref.current)
+              if (zoomTargetRef.current && zoomRef.current) {
+                d3.select(zoomTargetRef.current)
                   .transition()
                   .duration(350)
                   .call(zoomRef.current.transform, d3.zoomIdentity);

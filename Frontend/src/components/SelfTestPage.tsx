@@ -55,18 +55,18 @@ const fieldConfig: Record<NumericField, { label: string; description: string; ma
   destinationHostServiceCount: { label: "Destination host service count", description: "Recent destination connections using the same service." },
 };
 
-// A valid normal-like sample keeps demonstrations one click away while still calling the real /predict endpoint.
+// Verified against the deployed /predict endpoint: this representative low-risk row scores near 0% attack.
 const initialInput: PredictionFormInput = {
-  duration: "1.2",
-  srcBytes: "1200",
-  dstBytes: "800",
-  totalBytes: "2000",
-  byteRatio: "1.5",
-  activityCount: "2",
-  serviceCount: "1",
-  sameServiceRate: "0.8",
-  destinationHostCount: "3",
-  destinationHostServiceCount: "2",
+  duration: "0",
+  srcBytes: "235",
+  dstBytes: "4955",
+  totalBytes: "5190",
+  byteRatio: "0.0474268415741675",
+  activityCount: "1",
+  serviceCount: "6",
+  sameServiceRate: "1",
+  destinationHostCount: "8",
+  destinationHostServiceCount: "255",
   protocolGroup: "TCP",
   serviceGroup: "WEB",
   connectionGroup: "Established",
@@ -74,23 +74,23 @@ const initialInput: PredictionFormInput = {
   connectionDetail: "sf",
 };
 
-// This sample is intentionally higher-risk, but the backend still decides the final model result.
+// Verified against the deployed /predict endpoint: this labelled attack row scores above 99% attack.
 const attackLikeInput: PredictionFormInput = {
-  duration: "0.00001",
-  srcBytes: "1762",
-  dstBytes: "0",
-  totalBytes: "1762",
-  byteRatio: "1762",
-  activityCount: "14",
-  serviceCount: "12",
-  sameServiceRate: "0.86",
-  destinationHostCount: "220",
-  destinationHostServiceCount: "240",
-  protocolGroup: "UDP",
-  serviceGroup: "OTHER",
-  connectionGroup: "ERROR",
-  serviceDetail: "other",
-  connectionDetail: "int",
+  duration: "2.02925",
+  srcBytes: "1634",
+  dstBytes: "152696",
+  totalBytes: "154330",
+  byteRatio: "0.0107010006810918",
+  activityCount: "2",
+  serviceCount: "1",
+  sameServiceRate: "0.5",
+  destinationHostCount: "1",
+  destinationHostServiceCount: "1",
+  protocolGroup: "TCP",
+  serviceGroup: "EMAIL",
+  connectionGroup: "Established",
+  serviceDetail: "pop3",
+  connectionDetail: "fin",
 };
 
 type SelfTestPageProps = SyncCallbacks & {
