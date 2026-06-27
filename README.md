@@ -1,6 +1,6 @@
 # AEGIS-NET Network Anomaly Analytics
 
-AEGIS-NET is a production-facing cybersecurity analytics dashboard for detecting anomalous network traffic from uploaded CSV datasets. It combines a React + TypeScript frontend, D3.js visual analytics, a FastAPI backend, and trained machine-learning models deployed through AWS.
+AEGIS-NET is a production-facing cybersecurity analytics dashboard for detecting anomalous network traffic from uploaded CSV datasets. Its frontend uses React 18, TypeScript, Axios, D3.js, Vite, CSS, browser `localStorage`, and AWS Amplify alongside a FastAPI backend and trained machine-learning models deployed through AWS.
 
 The final system performs binary network-traffic classification:
 
@@ -19,42 +19,48 @@ The final system performs binary network-traffic classification:
 | Supported comparison model | Random Forest is loaded and used for comparison where the artifact is available. |
 | Optional legacy model path | Isolation Forest is supported by the loader if an artifact exists, but it is not the final claimed primary model. |
 | Datasets | Assignment datasets based on UNSW-NB15 and NSL-KDD/KDD-style traffic, plus local demo datasets for presentation. |
-| Frontend | React, TypeScript, Vite, D3.js, CSS. |
+| Frontend | React 18, TypeScript, Axios, D3.js, Vite, CSS, browser `localStorage`, and AWS Amplify. |
 | Backend | FastAPI, Pydantic, pandas, scikit-learn-style preprocessing, XGBoost/joblib/pickle model loading. |
 | Deployment | AWS Amplify for frontend and AWS App Runner for backend. |
 
 ## 2. System Architecture
 
 ```text
-User Browser
-  |
-  | React + TypeScript SPA
-  | D3.js charts and local UI state
-  |
-  v
-Central fetch API client
-  |
-  v
-FastAPI Backend on AWS App Runner
-  |
-  | /upload-log or /predict
-  v
-Validation and preprocessing
-  |
-  | fitted preprocessing artifact when available
-  | manual fallback with warning if unavailable
-  v
-67-feature model input contract
-  |
-  v
-XGBoost primary model + Random Forest comparison
-  |
-  v
-Prediction, probability, thresholds
-  |
-  v
-Dashboard metrics, D3 charts, tables, alerts
+React 18 + TypeScript
+        |
+        | Axios
+        v
+Central API Client (Frontend/src/utils/api.ts)
+        |
+        v
+FastAPI Backend
+        |
+        v
+Business Logic (Backend/services/)
+        |
+        v
+Preprocessing Pipeline
+        |
+        v
+XGBoost / Random Forest
 ```
+
+### Frontend HTTP Communication
+
+The frontend uses one centralized Axios client located at `Frontend/src/utils/api.ts`. All React pages communicate with the FastAPI backend through this shared API layer rather than issuing HTTP requests directly.
+
+The Axios client provides:
+
+- Centralized `VITE_API_BASE_URL` configuration.
+- Production AWS App Runner fallback URL.
+- Standard 30-second request timeout.
+- Extended 180-second timeout for dataset uploads.
+- Automatic JSON request and response handling.
+- Multipart form upload support with browser-generated boundaries.
+- Consistent FastAPI and network error normalization.
+- Typed `getJson<T>()`, `postJson<T>()`, and `postMultipart<T>()` helpers.
+
+React components do not import Axios or communicate with the backend directly. Page components call domain utility functions, which use the centralized client.
 
 Storage and runtime behavior:
 
@@ -166,7 +172,7 @@ Storage and runtime behavior:
 | `Frontend/src/components/D3ProtocolRiskChart.tsx` | Upload Logs protocol risk comparison chart. |
 | `Frontend/src/components/D3ProbabilityHistogram.tsx` | Upload Logs attack-probability distribution chart. |
 | `Frontend/src/components/D3HeatmapChart.tsx` | Confusion-matrix heatmap when labelled upload data is available. |
-| `Frontend/src/utils/api.ts` | Central fetch-based API client and backend error-message normalization. |
+| `Frontend/src/utils/api.ts` | Central Axios client, typed HTTP helpers, timeout policy, multipart support, and FastAPI error normalization. |
 | `Frontend/src/config/api.ts` | API base URL configuration via `VITE_API_BASE_URL`. |
 | `Frontend/src/utils/uploadAnalysis.ts` | Upload response normalization, localStorage cache management, CSV/JSON export, template export, chart data mapping. |
 | `Frontend/src/utils/dashboard.ts` | Dashboard backend summary mapping and local upload-cache fallback logic. |
@@ -178,6 +184,19 @@ Storage and runtime behavior:
 | `Frontend/src/styles/global.css` | Main application styling, responsive layout, sidebar, cards, tables, charts, and upload dashboard styles. |
 | `Frontend/index.html` | Vite HTML shell and accessibility widget script location. |
 | `amplify.yml` | AWS Amplify build configuration for the frontend. |
+
+### Frontend API Utility Layer
+
+These modules isolate networking and response mapping from UI components:
+
+| File | Purpose |
+| --- | --- |
+| `Frontend/src/utils/api.ts` | Creates the single Axios client and provides typed JSON/multipart HTTP helpers. |
+| `Frontend/src/utils/dashboard.ts` | Loads Dashboard summary, alerts, and top-route data. |
+| `Frontend/src/utils/uploadAnalysis.ts` | Uploads CSV files and normalizes Upload Logs analysis responses. |
+| `Frontend/src/utils/liveVisitors.ts` | Loads live visitor/top-route activity and sends privacy-limited page-view pings. |
+| `Frontend/src/utils/modelInsights.ts` | Loads and normalizes model metrics. |
+| `Frontend/src/utils/predict.ts` | Maps Self-Test values and submits prediction requests. |
 
 ## 5. Page Overview
 
@@ -240,6 +259,18 @@ User interactions:
 - Reset filters.
 - Export filtered rows or full normalized analysis JSON.
 - Export chart cards as PNG.
+
+#### Upload Flow
+
+1. The user selects or drops a CSV file.
+2. The React Upload Logs page calls the centralized upload utility.
+3. Axios sends a multipart request to FastAPI `POST /upload-log`.
+4. FastAPI validates the dataset and upload constraints.
+5. Backend preprocessing maps and aligns the traffic features.
+6. Available machine-learning models generate predictions and aggregate analysis.
+7. FastAPI returns the structured JSON response.
+8. Axios receives and normalizes the response or any FastAPI error.
+9. React updates KPI cards, D3.js charts, the paginated table, and the shared `localStorage` cache.
 
 ### Live Visitors
 
@@ -313,6 +344,16 @@ User interactions:
 - Load sample attack-like traffic.
 - Run prediction.
 - View binary prediction, attack probability, confidence, and timestamp.
+
+#### Self-Test Flow
+
+1. The user enters traffic values or loads a verified sample.
+2. React calls the typed prediction utility.
+3. Axios sends JSON to FastAPI `POST /predict`.
+4. FastAPI validates the 15 harmonized input fields.
+5. The preprocessing and prediction services execute.
+6. FastAPI returns a structured JSON prediction response.
+7. React displays the binary prediction, attack probability, confidence, and timestamp.
 
 ## 6. API Endpoints
 
@@ -660,6 +701,17 @@ VITE_API_BASE_URL=http://localhost:8080
 ```
 
 ## Verification Commands
+
+### Frontend Networking Verification
+
+The frontend uses a single centralized Axios client.
+
+Verification completed:
+
+- No browser Fetch API usage remains under `Frontend/src`.
+- No React component imports Axios directly.
+- All backend networking flows through `Frontend/src/utils/api.ts` and its domain utility modules.
+- Upload Logs, Dashboard, Live Visitors, Model Insights, and Self-Test use the shared API layer.
 
 Frontend build:
 
